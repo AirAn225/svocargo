@@ -16,13 +16,16 @@ from apscheduler.triggers.cron import CronTrigger
 TOKEN = os.environ["TOKEN"]
 MY_CHAT_ID = int(os.environ["MY_CHAT_ID"])
 
+DATA_DIR = os.getenv("DATA_DIR", "/app/data")
+logfile = os.path.join(DATA_DIR, "bot.log")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GETSCHEDULE_PATH   = os.path.join(BASE_DIR, "getschedule.py")
 FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24.py")
 TZ = ZoneInfo("Europe/Moscow")
 print("Локальное время: %s, UTC: %s", datetime.now(), datetime.now(timezone.utc))
 bot = telebot.TeleBot(TOKEN, use_class_middlewares=True)
-BAN_FILE = "banned_users.json"
+BAN_FILE = os.path.join(DATA_DIR, "banned_users.json")
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -98,7 +101,7 @@ def run_script(script_path):
   print(f"⏰ Планировщик запускает скрипт: {script_path} в {now_str}")
 
   # Открываем общий файл логов в режиме добавления ('a')
-  with open("bot.log", "a", encoding="utf-8") as log_file:
+  with open(logfile, "a", encoding="utf-8") as log_file:
     # Записываем разделитель сеанса в общий файл
     log_file.write(f"\n{'='*50}\n")
     log_file.write(f"🚀 Запуск {script_path} через планировщик: {now_str}\n")
@@ -155,7 +158,6 @@ scheduler.start()
 
 #####################################################################################
 #####################################################################################
-USERS_FILE = "users.json"
 
 def load_users() -> dict:
     if not os.path.exists(USERS_FILE):
@@ -316,24 +318,26 @@ def callback_ban_user(call):
         f"🚫 Пользователь `{target_id}` забанен. Ему запрещено отправлять фидбек.",
         parse_mode="Markdown",
     )
+botinfofile = os.path.join(DATA_DIR, "info.txt")
 
 @bot.message_handler(func=lambda msg: msg.text == "📃Информация о боте📃")
 @bot.message_handler(commands=["info"])
 def send_info(message):
     user_id = message.chat.id
-    if os.path.exists('info.txt'):
-        with open('info.txt', 'r', encoding='utf-8') as infofile:
+    if os.path.exists(botinfofile):
+        with open(botinfofile, 'r', encoding='utf-8') as infofile:
             sendinfo = infofile.read()
     else:
         sendinfo = "⚠️ Информация временно недоступна."
     bot.send_message(user_id, sendinfo, disable_web_page_preview=True, parse_mode='HTML')
-
+hottabfile = os.path.join(DATA_DIR, "hot-tab.txt")
+    
 @bot.message_handler(func=lambda msg: msg.text == "🔥Список горячих рейсов🔥")
 @bot.message_handler(commands=["gethot"])
 def send_info(message):
     user_id = message.chat.id
-    if os.path.exists('hot-tab.txt'):
-        with open('hot-tab.txt', 'r', encoding='utf-8') as hotfile:
+    if os.path.exists(hottabfile):
+        with open(hottabfile, 'r', encoding='utf-8') as hotfile:
             sendhot = hotfile.read()
     else:
         sendhot = "⚠️ Информация временно недоступна."
