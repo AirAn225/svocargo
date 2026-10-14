@@ -1,0 +1,37 @@
+[
+    {
+        "flight_number": "W5098",
+        "sheduled_time": "2026-10-15 11:00:00",
+        "estimated_time": "2026-10-15 11:00:00",
+        "actual_time": null,
+        "aircraft_type": "772",
+        "origin_destination": "IKA-SVO",
+        "destination": "SVO",
+        "status": "PLN",
+        "destination_country": "RU"
+    },
+    {
+        "flight_number": "W5099",
+        "sheduled_time": "2026-10-15 12:40:00",
+        "estimated_time": "2026-10-15 12:40:00",
+        "actual_time": null,
+        "aircraft_type": "772",
+        "origin_destination": "SVO-IKA",
+        "destination": "IKA",
+        "status": "PLN",
+        "destination_country": "IR",
+        "bulk": null
+    },
+    {
+        "flight_number": "U39219",
+        "sheduled_time": "2026-10-15 13:05:00",
+        "estimated_time": "2026-10-15 15:05:00",
+        "actual_time": null,
+        "aircraft_type": "I9F",
+        "origin_destination": "SVO-SJW",
+        "destination": "SJW",
+        "status": "PLN",
+        "destination_country": "CN",
+        "bulk": null
+    }
+]

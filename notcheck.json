@@ -1,0 +1,130 @@
+[
+    {
+        "flight_number": "UJ708",
+        "sheduled_time": "2026-10-15 00:20:00",
+        "estimated_time": "2026-10-15 00:20:00",
+        "actual_time": null,
+        "aircraft_type": "320",
+        "origin_destination": "SVO-HRG",
+        "destination": "HRG",
+        "status": "PLN",
+        "destination_country": "EG",
+        "bulk": null
+    },
+    {
+        "flight_number": "W5099",
+        "sheduled_time": "2026-10-15 12:40:00",
+        "estimated_time": "2026-10-15 12:40:00",
+        "actual_time": null,
+        "aircraft_type": "772",
+        "origin_destination": "SVO-IKA",
+        "destination": "IKA",
+        "status": "PLN",
+        "destination_country": "IR",
+        "bulk": null
+    },
+    {
+        "flight_number": "YC132",
+        "sheduled_time": "2026-10-15 11:30:00",
+        "estimated_time": "2026-10-15 11:30:00",
+        "actual_time": null,
+        "aircraft_type": "320",
+        "origin_destination": "SVO-SLY",
+        "destination": "SLY",
+        "status": "PLN",
+        "destination_country": "RU",
+        "bulk": "1"
+    },
+    {
+        "flight_number": "UJ618",
+        "sheduled_time": "2026-10-15 14:55:00",
+        "estimated_time": "2026-10-15 14:55:00",
+        "actual_time": null,
+        "aircraft_type": "321",
+        "origin_destination": "SVO-SSH",
+        "destination": "SSH",
+        "status": "PLN",
+        "destination_country": "EG",
+        "bulk": null
+    },
+    {
+        "flight_number": "YC190",
+        "sheduled_time": "2026-10-15 10:35:00",
+        "estimated_time": "2026-10-15 10:35:00",
+        "actual_time": null,
+        "aircraft_type": "320",
+        "origin_destination": "SVO-NUX",
+        "destination": "NUX",
+        "status": "PLN",
+        "destination_country": "RU",
+        "bulk": "1"
+    },
+    {
+        "flight_number": "U39219",
+        "sheduled_time": "2026-10-15 13:05:00",
+        "estimated_time": "2026-10-15 15:05:00",
+        "actual_time": null,
+        "aircraft_type": "I9F",
+        "origin_destination": "SVO-SJW",
+        "destination": "SJW",
+        "status": "PLN",
+        "destination_country": "CN",
+        "bulk": null
+    },
+    {
+        "flight_number": "UJ620",
+        "sheduled_time": "2026-10-15 00:35:00",
+        "estimated_time": "2026-10-15 00:35:00",
+        "actual_time": null,
+        "aircraft_type": "321",
+        "origin_destination": "SVO-SSH",
+        "destination": "SSH",
+        "status": "PLN",
+        "destination_country": "EG",
+        "bulk": null
+    },
+    {
+        "flight_number": "W5098",
+        "sheduled_time": "2026-10-15 11:00:00",
+        "estimated_time": "2026-10-15 11:00:00",
+        "actual_time": null,
+        "aircraft_type": "772",
+        "origin_destination": "IKA-SVO",
+        "destination": "SVO",
+        "status": "PLN",
+        "destination_country": "RU"
+    },
+    {
+        "flight_number": "YC131",
+        "sheduled_time": "2026-10-15 10:15:00",
+        "estimated_time": "2026-10-15 10:15:00",
+        "actual_time": null,
+        "aircraft_type": "320",
+        "origin_destination": "SLY-SVO",
+        "destination": "SVO",
+        "status": "PLN",
+        "destination_country": "RU"
+    },
+    {
+        "flight_number": "UJ617",
+        "sheduled_time": "2026-10-15 13:55:00",
+        "estimated_time": "2026-10-15 13:55:00",
+        "actual_time": null,
+        "aircraft_type": "321",
+        "origin_destination": "SSH-SVO",
+        "destination": "SVO",
+        "status": "PLN",
+        "destination_country": "RU"
+    },
+    {
+        "flight_number": "YC189",
+        "sheduled_time": "2026-10-15 09:35:00",
+        "estimated_time": "2026-10-15 09:35:00",
+        "actual_time": null,
+        "aircraft_type": "320",
+        "origin_destination": "NUX-SVO",
+        "destination": "SVO",
+        "status": "PLN",
+        "destination_country": "RU"
+    }
+]
