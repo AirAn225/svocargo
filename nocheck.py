@@ -2,10 +2,13 @@ import json
 from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 import logging
+import os
 
+DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+logfile = os.path.join(DATA_DIR, 'bot.log')
 # Настройка логирования для записи в тот же общий файл
 logging.basicConfig(
-    filename="bot.log",
+    filename=logfile,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -30,10 +33,11 @@ print(datetime.now())
 
 # Текущий результат работы функции:
 print(get_formatted_date())
+splanesfile = os.path.join(DATA_DIR, 'splanes.json')
 
 
 try:
-    with open("splanes.json", "r", encoding="utf-8") as file:
+    with open(splanesfile, "r", encoding="utf-8") as file:
         data = json.load(file)
 except FileNotFoundError:
     print("Ошибка: Файл nocheck.json не найден.")
@@ -65,13 +69,13 @@ sorted_data = sorted(
 )
 
 # 4. Записываем отсортированные данные обратно
-with open("splanes.json", "w", encoding="utf-8") as file0:
+with open(splanesfile, "w", encoding="utf-8") as file0:
     json.dump(sorted_data, file0, ensure_ascii=False, indent=4)
 
 
-
+specialfile = os.path.join(DATA_DIR, 'special.json')
 try:
-    with open("special.json", "r", encoding="utf-8") as file1:
+    with open(specialfile, "r", encoding="utf-8") as file1:
         data = json.load(file1)
 except FileNotFoundError:
     print("Ошибка: Файл special.json не найден.")
@@ -103,7 +107,7 @@ sorted_data = sorted(
 )
 
 # 4. Записываем отсортированные данные обратно
-with open("special.json", "w", encoding="utf-8") as file2:
+with open(specialfile, "w", encoding="utf-8") as file2:
     json.dump(sorted_data, file2, ensure_ascii=False, indent=4)
 
 print("Табло успешно отсортировано по хронологии авиакомпаний!")
@@ -116,13 +120,15 @@ slovar = {"WZ":'Red Wings', "QE":'FARS QESHM', "U3":'Sky Gates', "VI":'Volga-Dne
 page = f'  🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n  🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
 page2 = ' ━━━━━━━━━━━━━━━━━━━━  \n 🎨 СПЕЦЛИВРЕИ ✨ \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
 page1_5 = ' ━━━━━━━━━━━━━━━━━━━━  \n ✈️ Табло FLIGHTRADAR24 📡 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
-with open("special.json", "r", encoding="utf-8") as filespecial:
+with open(specialfile, "r", encoding="utf-8") as filespecial:
     airspecial = json.load(filespecial)
 
-with open("splanes.json", "r", encoding="utf-8") as filesplanes:
+with open(splanesfile, "r", encoding="utf-8") as filesplanes:
     airsplanes = json.load(filesplanes)
 
-with open("fr24_splanes.json", "r", encoding="utf-8") as filefrsplanes:
+frsplanesfile = os.path.join(DATA_DIR, 'fr24_splanes.json')
+
+with open(frsplanesfile, "r", encoding="utf-8") as filefrsplanes:
     fr24_splanes = json.load(filefrsplanes)
 
 
@@ -180,6 +186,6 @@ else:
 
 
 endpage = page + page1_5 + page2 + '@uueeappr_bot'
-
-with open("hot-tab.txt", 'w', encoding='utf-8') as hottab:
+hottabfile = os.path.join(DATA_DIR, 'hot-tab.txt')
+with open(hottabfile, 'w', encoding='utf-8') as hottab:
     hottab.write(endpage)
