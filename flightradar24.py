@@ -9,9 +9,12 @@ from zoneinfo import ZoneInfo
 import requests
 import logging
 
+# Все пути к .json строим от этой директории
+DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+logfile = os.path.join(DATA_DIR, 'bot.log')
 # Настройка логирования для записи в тот же общий файл
 logging.basicConfig(
-    filename="bot.log",
+    filename=logfile,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -21,9 +24,9 @@ logging.basicConfig(
 # Теперь вместо print можно писать так (или оставить print, они тоже попадут в лог через subprocess):
 logging.info("5️⃣ Начинаем проверку Moscow Cargo с FR24 для поиска специальных ливрей... 🚀")
 
-ARRIVALS_FILE = "arr.json"
-DEPARTURES_FILE = "dep.json"
-SPECIAL_FILE = "special.json"
+ARRIVALS_FILE = os.path.join(DATA_DIR, 'arr.json')
+DEPARTURES_FILE = os.path.join(DATA_DIR, 'dep.json')
+SPECIAL_FILE = os.path.join(DATA_DIR, 'special.json')
 
 HEADERS = {
     'User-Agent': (
