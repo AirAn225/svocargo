@@ -70,7 +70,6 @@ class MaintenanceMiddleware(telebot.BaseMiddleware):
         pass
 
 # Подключаем middleware ко всем сообщениям
-bot.setup_middleware(MaintenanceMiddleware())
 # Middleware для кнопок
 class MaintenanceCallbackMiddleware(telebot.BaseMiddleware):
     def __init__(self):
@@ -88,7 +87,65 @@ class MaintenanceCallbackMiddleware(telebot.BaseMiddleware):
     def post_process(self, call, data, exception):
         pass
 
+ALLOWED_THREAD_ID = 231466             # ← ЗАМЕНИТЕ на ваш ID ветки
+# ID группы, если хотите ограничить конкретной группой (None = любая)
+ALLOWED_CHAT_ID = -1001571945990      # ← ЗАМЕНИТЕ или поставьте None
+
+
+class TopicFilterMiddleware(telebot.BaseMiddleware):
+    """
+    Пропускает:
+      - все сообщения в личке;
+      - сообщения в разрешённой ветке разрешённой группы.
+    Игнорирует всё остальное.
+    """
+    def __init__(self, allowed_thread_id, allowed_chat_id=None):
+        self.allowed_thread_id = allowed_thread_id
+        self.allowed_chat_id = allowed_chat_id
+        self.update_types = ['message', 'edited_message', 'callback_query']
+
+    def _get_thread_id(self, obj):
+        """Достаёт message_thread_id и для message, и для callback_query."""
+        thread_id = getattr(obj, "message_thread_id", None)
+        # у callback_query thread_id лежит в obj.message
+        inner = getattr(obj, "message", None)
+        if inner is not None:
+            thread_id = getattr(inner, "message_thread_id", thread_id)
+        return thread_id
+
+    def pre_process(self, message, data):
+        chat = message.chat
+
+        # 1. Личка — пропускаем всегда
+        if chat.type == "private":
+            return
+
+        # 2. Если задана конкретная группа — всё остальное игнорируем
+        if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
+            return SkipHandler()
+
+        # 3. В группе разрешена только одна ветка
+        if self._get_thread_id(message) != self.allowed_thread_id:
+            return SkipHandler()
+
+    def post_process(self, message, data, exception):
+        pass
+
+
+# ───────────────────────────────────────────────────────────
+# ПОДКЛЮЧЕНИЕ MIDDLEWARE (порядок важен!)
+# ───────────────────────────────────────────────────────────
+
+# 1. Техработы — важнее всего
+bot.setup_middleware(MaintenanceMiddleware())
 bot.setup_middleware(MaintenanceCallbackMiddleware())
+
+# 2. Фильтр по веткам — если не та ветка, дальше не идём
+bot.setup_middleware(TopicFilterMiddleware(
+    allowed_thread_id=ALLOWED_THREAD_ID,
+    allowed_chat_id=ALLOWED_CHAT_ID,
+))
+
 
 ####################################################################
 def test_scheduler():
