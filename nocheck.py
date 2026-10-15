@@ -20,12 +20,12 @@ logging.info("6️⃣ Финальная сортировка и составл�
 
 TZ = ZoneInfo("Europe/Moscow")
 def tomorrow_date():
-    tomorrow = datetime.now(TZ) + timedelta(days=1)+timedelta(hours=2)+timedelta(minutes=25)
+    tomorrow = datetime.now(TZ) + timedelta(days=1)+timedelta(hours=2)+timedelta(minutes=35)
     return tomorrow.strftime("%d.%m.%Y")
 
 def get_formatted_date():
     # Сдвигаем время на 3 часа назад для смены даты в 21:35
-    shifted_now = datetime.now(TZ) + timedelta(hours=2)+timedelta(minutes=25)
+    shifted_now = datetime.now(TZ) + timedelta(hours=2)+timedelta(minutes=35)
 
     # Форматируем в строку "день-месяц-год"
     return shifted_now.strftime("%d.%m.%Y")
