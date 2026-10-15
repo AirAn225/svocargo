@@ -32,7 +32,7 @@ with open(schedulefile, "r", encoding="utf-8") as f:
 for i in range(len(air)):
     company = str(((air[i]).get("flight_number"))[:2])
     status = str((air[i]).get("status"))
-    if company not in ("SU", "S7", "FV", "DP", "JP", "5N", "D2", "U6", "RL", "A4", "E7", "UT", "N4", "EO", "B2", "4B") and status == "PLN":
+    if company not in ("SU", "0E", "UZ", "S7", "FV", "DP", "JP", "5N", "D2", "U6", "RL", "A4", "E7", "UT", "N4", "EO", "B2", "4B") and status == "PLN":
         sortsp.append(air[i])
 sortedfile = os.path.join(DATA_DIR, 'sorted.json')
 with open(sortedfile, "w", encoding="utf-8") as fxx:
