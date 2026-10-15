@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import logging
 
+DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+logfile = os.path.join(DATA_DIR, 'bot.log')
 # Настройка логирования для записи в тот же общий файл
 logging.basicConfig(
-    filename="bot.log",
+    filename=logfile,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -23,7 +25,7 @@ logging.info("3️⃣ Получаем данные о чартерах с Fligh
 fr_api = FlightRadar24API()
 
 airport_code = "UUEE"  # Шереметьево (ICAO)
-OUTPUT_FILE = "tomorrow_schedule.json"
+OUTPUT_FILE = os.path.join(DATA_DIR, 'tomorrow_schedule.json')
 
 
 def fetch_clean_tomorrow_schedule():
