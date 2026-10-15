@@ -166,7 +166,7 @@ else:
             page = page + f'{iata} {airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n'
 
 if len(fr24_splanes) == 0:
-    page1_5 = page1_5 + f'  📭 Пока что даже Лукойла не ожидается( \n Подождите немного, пока информация обновиться, или приходите завтра =) \n \n'
+    page1_5 = page1_5 + f'  📭 Пока что даже Лукойла не ожидается( \n Подождите немного, пока информация обновится, или приходите завтра =) \n \n'
 else:
     for kkk in fr24_splanes:
         fn = kkk.get("flight_number")
