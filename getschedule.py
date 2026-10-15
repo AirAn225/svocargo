@@ -3,12 +3,16 @@ import json
 from datetime import datetime, timedelta
 import subprocess, sys, time
 from zoneinfo import ZoneInfo
-
+import os
 import logging
+
+
+DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+logfile = os.path.join(DATA_DIR, 'bot.log')
 
 # Настройка логирования для записи в тот же общий файл
 logging.basicConfig(
-    filename="bot.log",
+    filename=logfile,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -107,7 +111,7 @@ print(f"\n==========================================")
 print(f"ГАРАНТИРОВАННЫЙ ИТОГ: Собрано {len(unique_flights)} уникальных рейсов!")
 print(f"==========================================")
 
-filename = f"schedule.json"
+filename = os.path.join(DATA_DIR, 'schedule.json')
 with open(filename, 'w', encoding='utf-8') as f:
     json.dump(unique_flights, f, ensure_ascii=False, indent=4)
 
