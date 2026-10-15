@@ -30,8 +30,8 @@ bot = telebot.TeleBot(TOKEN, use_class_middlewares=True)
 BAN_FILE = os.path.join(DATA_DIR, "banned_users.json")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 # ← ИЗМЕНЕНО: info.txt и hot-tab.txt — рядом с кодом, а не в DATA_DIR
-INFO_FILE = os.path.join(BASE_DIR, "info.txt")
-HOTTAB_FILE = os.path.join(BASE_DIR, "hot-tab.txt")
+INFO_FILE = os.path.join(DATA_DIR, "info.txt")
+HOTTAB_FILE = os.path.join(DATA_DIR, "hot-tab.txt")
 
 logging.basicConfig(
     level=logging.INFO,
