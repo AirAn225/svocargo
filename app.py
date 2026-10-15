@@ -341,7 +341,7 @@ def send_info(message):
             sendhot = hotfile.read()
     else:
         sendhot = "⚠️ Информация временно недоступна."
-    bot.send_message(user_id, sendhot)
+    bot.send_message(user_id, sendhot, disable_web_page_preview=True, parse_mode='HTML')
 
 
 
