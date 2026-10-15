@@ -1,16 +1,19 @@
 import json
 import subprocess, sys, time
+import logging
+import os
 
 sortsp = []
 dep = []
 arr = []
 notcheck = []
 
-import logging
+DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+logfile = os.path.join(DATA_DIR, 'bot.log')
 
 # Настройка логирования для записи в тот же общий файл
 logging.basicConfig(
-    filename="bot.log",
+    filename=logfile,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -21,8 +24,8 @@ logging.basicConfig(
 logging.info("2️⃣ Начинаем полную сортировку...🚀")
 #####Отсев ненужных бортов#####
 
-
-with open("schedule.json", "r", encoding="utf-8") as f:
+schedulefile = os.path.join(DATA_DIR, 'schedule.json')
+with open(schedulefile, "r", encoding="utf-8") as f:
     air = json.load(f)
 
 
@@ -31,15 +34,15 @@ for i in range(len(air)):
     status = str((air[i]).get("status"))
     if company not in ("SU", "S7", "FV", "DP", "JP", "5N", "D2", "U6", "RL", "A4", "E7", "UT", "N4", "EO", "B2", "4B") and status == "PLN":
         sortsp.append(air[i])
-
-with open("sorted.json", "w", encoding="utf-8") as fxx:
+sortedfile = os.path.join(DATA_DIR, 'sorted.json')
+with open(sortedfile, "w", encoding="utf-8") as fxx:
     json.dump(sortsp, fxx, ensure_ascii=False, indent=4)
     print('✅ sorted.json создан')
   
 time.sleep(0.5)
 #####Отсев интересных бортов#####
 
-with open("sorted.json", "r", encoding="utf-8") as ff:
+with open(sortedfile, "r", encoding="utf-8") as ff:
     air = json.load(ff)
 for ij in range(len(air)):
     dest = str(air[ij].get("destination"))
@@ -55,8 +58,9 @@ for ij in range(len(air)):
         arr.append(air[ij])
     else:
         dep.append(air[ij])
-
-with open("arr.json", "w", encoding="utf-8") as aj:
+arrfile = os.path.join(DATA_DIR, 'arr.json')
+depfile = os.path.join(DATA_DIR, 'dep.json')
+with open(arrfile, "w", encoding="utf-8") as aj:
     json.dump(
         arr,
         aj,
@@ -65,7 +69,7 @@ with open("arr.json", "w", encoding="utf-8") as aj:
     )
     print('✅ arr.json создан')
 
-with open("dep.json", "w", encoding="utf-8") as dj:
+with open(depfile, "w", encoding="utf-8") as dj:
     json.dump(
         dep,
         dj,
@@ -73,8 +77,8 @@ with open("dep.json", "w", encoding="utf-8") as dj:
         indent=4
     )
     print('✅ dep.json создан')
-
-with open("notcheck.json", "w", encoding="utf-8") as nc:
+ncfile = os.path.join(DATA_DIR, 'notcheck.json')
+with open(ncfile, "w", encoding="utf-8") as nc:
     json.dump(
         notcheck,
         nc,
@@ -84,7 +88,7 @@ with open("notcheck.json", "w", encoding="utf-8") as nc:
     print('✅ nocheck.json создан')
 
 endlist = []
-with open("notcheck.json", "r", encoding="utf-8") as fff:
+with open(ncfile, "r", encoding="utf-8") as fff:
     air = json.load(fff)
 
 for ii in range(len(air)):
@@ -102,8 +106,8 @@ for ii in range(len(air)):
             endlist.append(air[ii])
     else:
         endlist.append(air[ii])
-
-with open("splanes.json", "w", encoding="utf-8") as spl:
+splanesfile = os.path.join(DATA_DIR, 'splanes.json')
+with open(splanesfile, "w", encoding="utf-8") as spl:
     json.dump(
         endlist,
         spl,
