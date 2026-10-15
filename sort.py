@@ -51,7 +51,7 @@ for ij in range(len(air)):
     if company in ("WZ", "QE", "U3", "VI", "DZ", "AL", "GL", "FG", "G6", "XX", "JS", "SH", "IR", "W5", "T5", "VN", "R3", "UJ", "YC") or aircraft in ("CCX"):
         if company == "VN" and dest == "SVO":
             arr.append(air[ij])
-        if company == "VN" and arr == "SVO":
+        if company == "VN" and dest != "SVO":
             dep.append(air[ij])
         notcheck.append(air[ij])
     elif dest == "SVO":
