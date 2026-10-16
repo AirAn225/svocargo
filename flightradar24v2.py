@@ -105,55 +105,54 @@ def fetch_fr24_by_registration(registration):
 
 
 def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
-  """Анализирует данные FR24 с проверкой ТОЛЬКО по дате (без проверки времени)."""
-  TZ = ZoneInfo('Europe/Moscow')
-  if not fr24_data or not target_dt:
-    return None, '', False, None, False
+    """Возвращает: reg, airline_name, is_special, aircraft_type, date_matched, has_reg"""
+    TZ = ZoneInfo('Europe/Moscow')
+    if not fr24_data:
+        return None, '', False, None, False, False
 
-  if target_dt.tzinfo is None:
-    target_dt = target_dt.replace(tzinfo=TZ)
+    target_date_str = target_dt.strftime('%Y-%m-%d') if target_dt else None
 
-  target_date_str = target_dt.strftime('%Y-%m-%d')
+    # Сначала ищем запись с известным бортом
+    fallback = None  # (reg, airline, is_special, type) — борт известен, но дата/время не сошлись
+    for item in fr24_data:
+        aircraft_data = item.get('aircraft') or {}
+        airline_data = item.get('airline') or {}
+        time_data = item.get('time') or {}
 
-  for item in fr24_data:
-    aircraft_data = item.get('aircraft') or {}
-    airline_data = item.get('airline') or {}
-    time_data = item.get('time') or {}
+        reg = aircraft_data.get('registration')
+        if not reg:
+            continue
 
-    reg = aircraft_data.get('registration')
-    if not reg:
-      continue
+        airline_name = airline_data.get('name') or ''
+        model_data = aircraft_data.get('model') or {}
+        aircraft_type = model_data.get('code') or aircraft_data.get('code')
 
-    airline_name = airline_data.get('name') or ''
-    model_data = aircraft_data.get('model') or {}
-    aircraft_type = model_data.get('code') or aircraft_data.get('code')
+        keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
+        is_special = any(kw in airline_name.lower() for kw in keywords)
 
-    keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
-    is_special = any(kw in airline_name.lower() for kw in keywords)
+        scheduled_dict = time_data.get('scheduled', {})
+        if flight_type == 'arrival':
+            scheduled_ts = scheduled_dict.get('arrival') or scheduled_dict.get('departure')
+        else:
+            scheduled_ts = scheduled_dict.get('departure') or scheduled_dict.get('arrival')
 
-    scheduled_dict = time_data.get('scheduled', {})
+        if not scheduled_ts:
+            # Борт известен, но времени нет — запомним как fallback
+            if fallback is None:
+                fallback = (reg, airline_name, is_special, aircraft_type)
+            continue
 
-    if flight_type == 'arrival':
-      scheduled_ts = scheduled_dict.get('arrival') or scheduled_dict.get(
-          'departure'
-      )
-    else:
-      scheduled_ts = scheduled_dict.get('departure') or scheduled_dict.get(
-          'arrival'
-      )
+        flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
+        flight_date_str = flight_dt.strftime('%Y-%m-%d')
 
-    if scheduled_ts:
-      flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
-      if flight_dt.tzinfo is None:
-        flight_dt = flight_dt.replace(tzinfo=TZ)
+        if target_date_str and flight_date_str == target_date_str:
+            return reg, airline_name, is_special, aircraft_type, True, True
 
-      flight_date_str = flight_dt.strftime('%Y-%m-%d')
+    if fallback:
+        # Борт известен, но дата/время не совпали
+        return (*fallback, False, True)
 
-      # Проверяем СТРОГО совпадение даты (игнорируя время)
-      if flight_date_str == target_date_str:
-        return reg, airline_name, is_special, aircraft_type, True
-
-  return None, '', False, None, False
+    return None, '', False, None, False, False
 
 
 def normalize_flight_num(raw_num):
