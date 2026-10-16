@@ -76,10 +76,23 @@ def reply(message, text, **kwargs):
 
 # Middleware для сообщений
 class MaintenanceMiddleware(telebot.BaseMiddleware):
-    def __init__(self):
+    def __init__(self, allowed_thread_id=None, allowed_chat_id=None):
         self.update_types = ['message', 'edited_message']
+        self.allowed_thread_id = allowed_thread_id
+        self.allowed_chat_id = allowed_chat_id
+
+    def _in_allowed_place(self, message) -> bool:
+        """True, если сообщение в личке или в разрешённой ветке разрешённой группы."""
+        chat = message.chat
+        if chat.type == "private":
+            return True
+        if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
+            return False
+        return getattr(message, "message_thread_id", None) == self.allowed_thread_id
 
     def pre_process(self, message, data):
+        if not self._in_allowed_place(message):
+            return   # не наше место — молча пропускаем, фильтр веток решит дальше
         if is_maintenance_now():
             reply(message, "🛠 Попробуйте позже. Бот обновляет данные. Ещё немного =)")
             return SkipHandler()
@@ -90,10 +103,23 @@ class MaintenanceMiddleware(telebot.BaseMiddleware):
 
 # Middleware для кнопок
 class MaintenanceCallbackMiddleware(telebot.BaseMiddleware):
-    def __init__(self):
+    def __init__(self, allowed_thread_id=None, allowed_chat_id=None):
         self.update_types = ['callback_query']
+        self.allowed_thread_id = allowed_thread_id
+        self.allowed_chat_id = allowed_chat_id
+
+    def _in_allowed_place(self, call) -> bool:
+        chat = call.message.chat
+        if chat.type == "private":
+            return True
+        if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
+            return False
+        thread_id = getattr(call.message, "message_thread_id", None)
+        return thread_id == self.allowed_thread_id
 
     def pre_process(self, call, data):
+        if not self._in_allowed_place(call):
+            return
         if is_maintenance_now():
             bot.answer_callback_query(
                 call.id,
