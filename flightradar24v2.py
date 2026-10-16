@@ -210,114 +210,143 @@ def get_next_flight_from_reg_history(reg_data, arrival_dt, remaining_departures)
 
 
 def process_flights():
-  arr_flights = load_json(ARRIVALS_FILE)
-  dep_flights = load_json(DEPARTURES_FILE)
-  specials = load_json(SPECIAL_FILE) if os.path.exists(SPECIAL_FILE) else []
+    arr_flights = load_json(ARRIVALS_FILE)
+    dep_flights = load_json(DEPARTURES_FILE)
+    specials = load_json(SPECIAL_FILE) if os.path.exists(SPECIAL_FILE) else []
 
-  known_special_regs = set()
-  remaining_departures = list(dep_flights)
-  remaining_arr = []
+    known_special_regs = set()
+    remaining_departures = list(dep_flights)
+    remaining_arr = []
 
-  print('🚀 Начинаем обработку прилётов...')
+    print('🚀 Начинаем обработку прилётов...')
 
-  # --- ШАГ 1: ОБРАБОТКА ПРИЛЁТОВ И ПОИСК РАЗВОРОТОВ ---
-  for flight in arr_flights:
-    raw_num = flight.get('flight_number', '')
-    flight_num = normalize_flight_num(raw_num)
+    # --- ШАГ 1: ОБРАБОТКА ПРИЛЁТОВ И ПОИСК РАЗВОРОТОВ ---
+    for flight in arr_flights:
+        raw_num = flight.get('flight_number', '')
+        flight_num = normalize_flight_num(raw_num)
 
-    flight_time_str = flight.get('sheduled_time') or flight.get('time')
-    target_dt = parse_flight_time(flight_time_str)
+        flight_time_str = flight.get('sheduled_time') or flight.get('time')
+        target_dt = parse_flight_time(flight_time_str)
 
-    fr24_data = fetch_fr24_flight(flight_num)
-    reg, airline_name, is_special, aircraft_type, is_matched = analyze_fr24_data(
-        fr24_data, target_dt, flight_type='arrival'
-    )
+        fr24_data = fetch_fr24_flight(flight_num)
 
-    if is_matched and (is_special or (reg and reg in known_special_regs)):
-      if reg:
-        known_special_regs.add(reg)
+        (reg, airline_name, is_special,
+         aircraft_type, date_matched, has_reg) = analyze_fr24_data(
+            fr24_data, target_dt, flight_type='arrival'
+        )
 
-      print(
-          f'🔥 Найден спецприлёт {flight_num}: борт {reg} ({airline_name})'
-      )
-      flight['registration'] = reg
-      flight['aircraft_type'] = aircraft_type
-      flight['status'] = 'FOUND'
-      flight['livery'] = airline_name
-      specials.append(flight)
-      remaining_arr.append(flight)
+        # --- СЛУЧАЙ 1: борт известен и это спецливрея (или уже известный спецборт) ---
+        if has_reg and (is_special or reg in known_special_regs):
+            known_special_regs.add(reg)
 
-      # Ищем разворотный вылет по истории борта
-      if reg:
-        print(f'🔍 Запрашиваем историю борта {reg} для поиска разворота...')
-        reg_history_data = fetch_fr24_by_registration(reg)
-        found_dep = get_next_flight_from_reg_history(
-            reg_history_data, target_dt, remaining_departures
-        )
+            if date_matched:
+                print(f'🔥 Найден спецприлёт {flight_num}: борт {reg} ({airline_name})')
+            else:
+                print(f'⚠️ {flight_num}: борт {reg} ({airline_name}) найден, '
+                      f'но дата не совпала с расписанием. Всё равно добавляем (спецливрея).')
 
-        if found_dep:
-          dep_flight_num = found_dep.get('flight_number')
-          print(
-              f'✨ Найден разворотный вылет для борта {reg}: рейс'
-              f' {dep_flight_num}'
-          )
+            flight['registration'] = reg
+            flight['aircraft_type'] = aircraft_type
+            flight['status'] = 'FOUND'
+            flight['livery'] = airline_name
+            specials.append(flight)
+            remaining_arr.append(flight)
 
-          found_dep['registration'] = reg
-          found_dep['aircraft_type'] = aircraft_type
-          found_dep['status'] = 'FOUND'
-          found_dep['livery'] = airline_name
-          specials.append(found_dep)
+            # Ищем разворотный вылет по истории борта
+            print(f'🔍 Запрашиваем историю борта {reg} для поиска разворота...')
+            reg_history_data = fetch_fr24_by_registration(reg)
+            found_dep = get_next_flight_from_reg_history(
+                reg_history_data, target_dt, remaining_departures
+            )
 
-    elif is_matched and reg:
-      print(f'❌ Прилёт {flight_num}: обычный борт ({reg}). Удаляем из расписания.')
-    else:
-      print(
-          f'⏳ Прилёт {flight_num}: борт еще не назначен на FR24. Оставляем.'
-      )
-      remaining_arr.append(flight)
+            if found_dep:
+                dep_flight_num = found_dep.get('flight_number')
+                print(f'✨ Найден разворотный вылет для борта {reg}: '
+                      f'рейс {dep_flight_num}')
 
-  print('\n🚀 Обрабатываем оставшиеся вылеты...')
+                found_dep['registration'] = reg
+                found_dep['aircraft_type'] = aircraft_type
+                found_dep['status'] = 'FOUND'
+                found_dep['livery'] = airline_name
+                specials.append(found_dep)
 
-  # --- ШАГ 2: ОБРАБОТКА ОСТАВШИХСЯ ВЫЛЕТОВ ---
-  final_remaining_departures = []
+                # Убираем найденный разворот из списка оставшихся вылетов,
+                # чтобы ШАГ 2 не обработал его повторно
+                remaining_departures = [
+                    d for d in remaining_departures
+                    if d is not found_dep
+                ]
 
-  for flight in remaining_departures:
-    raw_num = flight.get('flight_number', '')
-    flight_num = normalize_flight_num(raw_num)
+        # --- СЛУЧАЙ 2: борт известен, но обычный — удаляем из расписания ---
+        elif has_reg and not is_special:
+            if date_matched:
+                print(f'❌ Прилёт {flight_num}: обычный борт ({reg}). '
+                      f'Удаляем из расписания.')
+            else:
+                print(f'⚠️ Прилёт {flight_num}: борт {reg} найден, '
+                      f'но дата не совпала. Удаляем как обычный.')
+            # НЕ добавляем в remaining_arr — рейс больше не нужен
 
-    flight_time_str = flight.get('sheduled_time') or flight.get('time')
-    target_dt = parse_flight_time(flight_time_str)
+        # --- СЛУЧАЙ 3: борт реально неизвестен — оставляем ждать ---
+        else:
+            print(f'⏳ Прилёт {flight_num}: борт еще не назначен на FR24. Оставляем.')
+            remaining_arr.append(flight)
 
-    fr24_data = fetch_fr24_flight(flight_num)
-    reg, airline_name, is_special, aircraft_type, is_matched = analyze_fr24_data(
-        fr24_data, target_dt, flight_type='departure'
-    )
+    print('\n🚀 Обрабатываем оставшиеся вылеты...')
 
-    if is_matched and (is_special or (reg and reg in known_special_regs)):
-      if reg:
-        known_special_regs.add(reg)
+    # --- ШАГ 2: ОБРАБОТКА ОСТАВШИХСЯ ВЫЛЕТОВ ---
+    final_remaining_departures = []
 
-      print(f'🔥 Найден спецвылет {flight_num}: борт {reg} ({airline_name})')
-      flight['registration'] = reg
-      flight['aircraft_type'] = aircraft_type
-      flight['status'] = 'FOUND'
-      flight['livery'] = airline_name
-      specials.append(flight)
+    for flight in remaining_departures:
+        raw_num = flight.get('flight_number', '')
+        flight_num = normalize_flight_num(raw_num)
 
-    elif is_matched and reg:
-      print(f'❌ Вылет {flight_num}: обычный борт ({reg}). Удаляем из расписания.')
-    else:
-      print(
-          f'⏳ Вылет {flight_num}: борт еще не назначен на FR24. Оставляем.'
-      )
-      final_remaining_departures.append(flight)
+        flight_time_str = flight.get('sheduled_time') or flight.get('time')
+        target_dt = parse_flight_time(flight_time_str)
 
-  # --- СОХРАНЕНИЕ ВСЕХ ФАЙЛОВ ---
-  save_json(SPECIAL_FILE, specials)
-  save_json(ARRIVALS_FILE, remaining_arr)
-  save_json(DEPARTURES_FILE, final_remaining_departures)
+        fr24_data = fetch_fr24_flight(flight_num)
 
-  print('\n✅ Обработка завершена! Все файлы успешно обновлены.')
+        (reg, airline_name, is_special,
+         aircraft_type, date_matched, has_reg) = analyze_fr24_data(
+            fr24_data, target_dt, flight_type='departure'
+        )
+
+        # --- СЛУЧАЙ 1: спецвылет ---
+        if has_reg and (is_special or reg in known_special_regs):
+            known_special_regs.add(reg)
+
+            if date_matched:
+                print(f'🔥 Найден спецвылет {flight_num}: борт {reg} ({airline_name})')
+            else:
+                print(f'⚠️ Вылет {flight_num}: борт {reg} ({airline_name}) найден, '
+                      f'но дата не совпала. Всё равно добавляем (спецливрея).')
+
+            flight['registration'] = reg
+            flight['aircraft_type'] = aircraft_type
+            flight['status'] = 'FOUND'
+            flight['livery'] = airline_name
+            specials.append(flight)
+
+        # --- СЛУЧАЙ 2: обычный борт — удаляем ---
+        elif has_reg and not is_special:
+            if date_matched:
+                print(f'❌ Вылет {flight_num}: обычный борт ({reg}). '
+                      f'Удаляем из расписания.')
+            else:
+                print(f'⚠️ Вылет {flight_num}: борт {reg} найден, '
+                      f'но дата не совпала. Удаляем как обычный.')
+
+        # --- СЛУЧАЙ 3: борт неизвестен — оставляем ---
+        else:
+            print(f'⏳ Вылет {flight_num}: борт еще не назначен на FR24. Оставляем.')
+            final_remaining_departures.append(flight)
+
+    # --- СОХРАНЕНИЕ ВСЕХ ФАЙЛОВ ---
+    save_json(SPECIAL_FILE, specials)
+    save_json(ARRIVALS_FILE, remaining_arr)
+    save_json(DEPARTURES_FILE, final_remaining_departures)
+
+    print('\n✅ Обработка завершена! Все файлы успешно обновлены.')
 
 
 if __name__ == '__main__':
