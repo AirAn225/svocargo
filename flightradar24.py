@@ -127,10 +127,11 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
     airline_name = airline_data.get('name') or ''
     model_data = aircraft_data.get('model') or {}
     aircraft_type = model_data.get('code') or aircraft_data.get('code')
-    block_keywords = ['MChS', 'Russia', 'Force', 'Squadron', '223', '224']
+    block_keywords = ['mchs', 'russiya', 'force', 'squadron', '223', '224', 'rsd', 'chd', 'state', 'unit', 'federal', 'гтк', 'rsaf', 'vks', 'vvsp', 'fso', 'military']
     keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
+    airline_name_lower = airline_name.lower()
     has_special_kw = any(kw in airline_name_lower for kw in keywords)
-    has_block_kw = any(bkw.lower() in airline_name_lower for bkw in block_keywords)
+    has_block_kw = any(bkw in airline_name_lower for bkw in block_keywords)
     is_special = has_special_kw and not has_block_kw
 
     scheduled_dict = time_data.get('scheduled', {})
