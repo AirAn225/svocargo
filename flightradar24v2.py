@@ -15,10 +15,10 @@ logfile = os.path.join(DATA_DIR, 'bot.log')
 # Настройка логирования для записи в тот же общий файл
 logging.basicConfig(
     filename=logfile,
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    encoding="utf-8",
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    encoding="utf-8",
 )
 
 # Теперь вместо print можно писать так (или оставить print, они тоже попадут в лог через subprocess):
@@ -29,79 +29,79 @@ DEPARTURES_FILE = os.path.join(DATA_DIR, 'dep.json')
 SPECIAL_FILE = os.path.join(DATA_DIR, 'special.json')
 
 HEADERS = {
-    'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/120.0.0.0 Safari/537.36'
-    ),
-    'Referer': 'https://www.flightradar24.com/',
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/120.0.0.0 Safari/537.36'
+    ),
+    'Referer': 'https://www.flightradar24.com/',
 }
 
 
 def load_json(filepath):
-  try:
-    with open(filepath, 'r', encoding='utf-8') as f:
-      return json.load(f)
-  except (FileNotFoundError, json.JSONDecodeError):
-    return []
+  try:
+    with open(filepath, 'r', encoding='utf-8') as f:
+      return json.load(f)
+  except (FileNotFoundError, json.JSONDecodeError):
+    return []
 
 
 def save_json(filepath, data):
-  with open(filepath, 'w', encoding='utf-8') as f:
-    json.dump(data, f, ensure_ascii=False, indent=4)
+  with open(filepath, 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False, indent=4)
 
 
 def parse_flight_time(time_str):
-  TZ = ZoneInfo('Europe/Moscow')
-  if not time_str:
-    return None
-  clean_str = str(time_str).strip()
-  formats = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%H:%M']
-  for fmt in formats:
-    try:
-      if fmt == '%H:%M':
-        today = datetime.now(TZ).strftime('%Y-%m-%d')
-        return datetime.strptime(f'{today} {clean_str}', '%Y-%m-%d %H:%M')
-      return datetime.strptime(clean_str[:19], fmt)
-    except ValueError:
-      continue
-  return None
+  TZ = ZoneInfo('Europe/Moscow')
+  if not time_str:
+    return None
+  clean_str = str(time_str).strip()
+  formats = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%H:%M']
+  for fmt in formats:
+    try:
+      if fmt == '%H:%M':
+        today = datetime.now(TZ).strftime('%Y-%m-%d')
+        return datetime.strptime(f'{today} {clean_str}', '%Y-%m-%d %H:%M')
+      return datetime.strptime(clean_str[:19], fmt)
+    except ValueError:
+      continue
+  return None
 
 
 def fetch_fr24_flight(flight_number):
-  clean_num = str(flight_number).replace(' ', '').upper()
-  url = (
-      f'https://api.flightradar24.com/common/v1/flight/list.json'
-      f'?query={clean_num}&fetchBy=flight&page=1&limit=10'
-  )
+  clean_num = str(flight_number).replace(' ', '').upper()
+  url = (
+      f'https://api.flightradar24.com/common/v1/flight/list.json'
+      f'?query={clean_num}&fetchBy=flight&page=1&limit=10'
+  )
 
-  try:
-    time.sleep(random.uniform(2.0, 4.0))
-    response = requests.get(url, headers=HEADERS, timeout=7)
-    if response.status_code == 200:
-      res = response.json().get('result', {}).get('response', {})
-      return res.get('data', []) or []
-  except Exception as e:
-    print(f'❌ Ошибка сети при запросе {clean_num}: {e}')
-  return []
+  try:
+    time.sleep(random.uniform(2.0, 4.0))
+    response = requests.get(url, headers=HEADERS, timeout=7)
+    if response.status_code == 200:
+      res = response.json().get('result', {}).get('response', {})
+      return res.get('data', []) or []
+  except Exception as e:
+    print(f'❌ Ошибка сети при запросе {clean_num}: {e}')
+  return []
 
 
 def fetch_fr24_by_registration(registration):
-  clean_reg = str(registration).strip().upper()
-  url = (
-      f'https://api.flightradar24.com/common/v1/flight/list.json'
-      f'?query={clean_reg}&fetchBy=reg&page=1&limit=10'
-  )
+  clean_reg = str(registration).strip().upper()
+  url = (
+      f'https://api.flightradar24.com/common/v1/flight/list.json'
+      f'?query={clean_reg}&fetchBy=reg&page=1&limit=10'
+  )
 
-  try:
-    time.sleep(random.uniform(2.0, 4.0))
-    response = requests.get(url, headers=HEADERS, timeout=7)
-    if response.status_code == 200:
-      res = response.json().get('result', {}).get('response', {})
-      return res.get('data', []) or []
-  except Exception as e:
-    print(f'❌ Ошибка сети при запросе истории борта {clean_reg}: {e}')
-  return []
+  try:
+    time.sleep(random.uniform(2.0, 4.0))
+    response = requests.get(url, headers=HEADERS, timeout=7)
+    if response.status_code == 200:
+      res = response.json().get('result', {}).get('response', {})
+      return res.get('data', []) or []
+  except Exception as e:
+    print(f'❌ Ошибка сети при запросе истории борта {clean_reg}: {e}')
+  return []
 
 
 def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
@@ -156,57 +156,57 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
 
 
 def normalize_flight_num(raw_num):
-  if not raw_num:
-    return ''
-  clean = str(raw_num).replace(' ', '').upper()
-  if len(clean) > 2:
-    prefix = clean[:2]
-    digits = clean[2:].lstrip('0')
-    return prefix + (digits if digits else '0')
-  return clean
+  if not raw_num:
+    return ''
+  clean = str(raw_num).replace(' ', '').upper()
+  if len(clean) > 2:
+    prefix = clean[:2]
+    digits = clean[2:].lstrip('0')
+    return prefix + (digits if digits else '0')
+  return clean
 
 
 def get_next_flight_from_reg_history(reg_data, arrival_dt, remaining_departures):
-  if not reg_data or not remaining_departures:
-    return None
+  if not reg_data or not remaining_departures:
+    return None
 
-  TZ = ZoneInfo('Europe/Moscow')
-  dep_dict = {}
-  for dep in remaining_departures:
-    raw_num = dep.get('flight_number', '')
-    norm_num = normalize_flight_num(raw_num)
-    dep_dict[norm_num] = dep
+  TZ = ZoneInfo('Europe/Moscow')
+  dep_dict = {}
+  for dep in remaining_departures:
+    raw_num = dep.get('flight_number', '')
+    norm_num = normalize_flight_num(raw_num)
+    dep_dict[norm_num] = dep
 
-  for item in reg_data:
-    identification = item.get('identification') or {}
-    number_data = identification.get('number') or {}
-    flight_code = number_data.get('default') or identification.get('callsign')
+  for item in reg_data:
+    identification = item.get('identification') or {}
+    number_data = identification.get('number') or {}
+    flight_code = number_data.get('default') or identification.get('callsign')
 
-    if not flight_code:
-      continue
+    if not flight_code:
+      continue
 
-    norm_fr24_num = normalize_flight_num(flight_code)
+    norm_fr24_num = normalize_flight_num(flight_code)
 
-    if norm_fr24_num in dep_dict:
-      time_data = item.get('time') or {}
-      dep_ts = time_data.get('scheduled', {}).get('departure') or time_data.get(
-          'estimated', {}
-      ).get('departure')
+    if norm_fr24_num in dep_dict:
+      time_data = item.get('time') or {}
+      dep_ts = time_data.get('scheduled', {}).get('departure') or time_data.get(
+          'estimated', {}
+      ).get('departure')
 
-      if dep_ts and arrival_dt:
-        dep_dt = datetime.fromtimestamp(dep_ts, tz=TZ)
-        if dep_dt.tzinfo is None:
-          dep_dt = dep_dt.replace(tzinfo=TZ)
-        arrival_dt = arrival_dt.replace(tzinfo=TZ)
+      if dep_ts and arrival_dt:
+        dep_dt = datetime.fromtimestamp(dep_ts, tz=TZ)
+        if dep_dt.tzinfo is None:
+          dep_dt = dep_dt.replace(tzinfo=TZ)
+        arrival_dt = arrival_dt.replace(tzinfo=TZ)
 
-        # Здесь сохраняем небольшое логичное условие разворота (вылет не раньше чем за час до прилёта)
-        if dep_dt >= arrival_dt - timedelta(hours=1):
-          print(f'🔗 Найден разворотный рейс: {flight_code}')
-          return dep_dict[norm_fr24_num]
-      else:
-        return dep_dict[norm_fr24_num]
+        # Здесь сохраняем небольшое логичное условие разворота (вылет не раньше чем за час до прилёта)
+        if dep_dt >= arrival_dt - timedelta(hours=1):
+          print(f'🔗 Найден разворотный рейс: {flight_code}')
+          return dep_dict[norm_fr24_num]
+      else:
+        return dep_dict[norm_fr24_num]
 
-  return None
+  return None
 
 
 def process_flights():
@@ -350,7 +350,7 @@ def process_flights():
 
 
 if __name__ == '__main__':
-  save_json(SPECIAL_FILE, [])
-  process_flights()
-  time.sleep(2)
-  subprocess.run([sys.executable, 'nocheck.py'])
+  save_json(SPECIAL_FILE, [])
+  process_flights()
+  time.sleep(2)
+  subprocess.run([sys.executable, 'nocheck.py'])
