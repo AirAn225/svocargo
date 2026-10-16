@@ -48,7 +48,7 @@ for ij in range(len(air)):
     dest = str(air[ij].get("destination"))
     company = str(((air[ij]).get("flight_number"))[:2])
     aircraft = str((air[ij]).get("aircraft_type"))
-    if company in ("WZ", "QE", "U3", "VI", "DZ", "AL", "GL", "FG", "G6", "XX", "JS", "SH", "IR", "W5", "T5", "VN", "R3", "UJ", "YC") or aircraft in ("CCX"):
+    if company in ("WZ", "QE", "U3", "VI", "DZ", "AL", "GL", "FG", "G6", "XX", "JS", "SH", "IR", "W5", "T5", "VN", "R3", "UJ", "YC") or aircraft in ("CCX", "CL3"):
         if company == "VN" and dest == "SVO":
             arr.append(air[ij])
         if company == "VN" and dest != "SVO":
