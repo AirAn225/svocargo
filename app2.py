@@ -45,7 +45,7 @@ print(f"[DEBUG] files here: {os.listdir(BASE_DIR)}")
 # Настройки "технических работ"
 MAINTENANCE_INTERVALS = [
     (dtime(7, 30), dtime(7, 40)),
-    (dtime(14, 30), dtime(14, 40)),
+    (dtime(12, 30), dtime(12, 40)),
     (dtime(21, 30), dtime(21, 50)),
     (dtime(23, 30), dtime(23, 40)),
 ]
@@ -230,7 +230,7 @@ scheduler.add_job(
 
 scheduler.add_job(
     run_script,
-    CronTrigger(hour="7, 14, 23", minute="31", timezone="Europe/Moscow"),
+    CronTrigger(hour="7, 12, 23", minute="31", timezone="Europe/Moscow"),
     args=[FLIGHTRADAR24_PATH],
     id="three_matches_per_day",
     misfire_grace_time=600,
