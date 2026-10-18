@@ -276,7 +276,7 @@ def process_flights():
                     d for d in remaining_departures
                     if d is not found_dep
                 ]
-                final_remaining_departures.append(flight)
+                final_remaining_departures.append(found_dep)
         # --- СЛУЧАЙ 2: борт известен, но обычный — удаляем из расписания ---
         elif has_reg and not is_special:
             if date_matched:
