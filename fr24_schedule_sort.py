@@ -44,4 +44,4 @@ def sort_schedule_file(filename=tsfile):
 if __name__ == "__main__":
     sort_schedule_file()
     time.sleep(2)
-    subprocess.run([sys.executable, "flightradar24.py"])
+    subprocess.run([sys.executable, "flightradar24v2.py"])
