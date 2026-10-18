@@ -217,7 +217,7 @@ def process_flights():
     known_special_regs = set()
     remaining_departures = list(dep_flights)
     remaining_arr = []
-
+    final_remaining_departures = []
     print('🚀 Начинаем обработку прилётов...')
 
     # --- ШАГ 1: ОБРАБОТКА ПРИЛЁТОВ И ПОИСК РАЗВОРОТОВ ---
@@ -276,7 +276,7 @@ def process_flights():
                     d for d in remaining_departures
                     if d is not found_dep
                 ]
-
+                final_remaining_departures.append(flight)
         # --- СЛУЧАЙ 2: борт известен, но обычный — удаляем из расписания ---
         elif has_reg and not is_special:
             if date_matched:
@@ -295,7 +295,6 @@ def process_flights():
     print('\n🚀 Обрабатываем оставшиеся вылеты...')
 
     # --- ШАГ 2: ОБРАБОТКА ОСТАВШИХСЯ ВЫЛЕТОВ ---
-    final_remaining_departures = []
 
     for flight in remaining_departures:
         raw_num = flight.get('flight_number', '')
@@ -326,6 +325,7 @@ def process_flights():
             flight['status'] = 'FOUND'
             flight['livery'] = airline_name
             specials.append(flight)
+            final_remaining_departures.append(flight)
 
         # --- СЛУЧАЙ 2: обычный борт — удаляем ---
         elif has_reg and not is_special:
