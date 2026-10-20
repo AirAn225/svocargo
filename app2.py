@@ -138,7 +138,7 @@ class AllowListMiddleware(telebot.BaseMiddleware):
                 bot.send_message(
                     message.chat.id,
                     "🔒 Доступ к боту ограничен.\n"
-                    "Если вы считаете, что это ошибка — напишите администратору.",
+                    "Если вы считаете, что это ошибка — напишите администратору @RA73220.",
                 )
             except Exception:
                 log.exception("Не удалось отправить отказ пользователю %s", user_id)
