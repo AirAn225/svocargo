@@ -77,10 +77,30 @@ def load_allowlist() -> set:
 
 
 def save_allowlist(ids: set):
-    """Сохраняет set разрешённых ID в allowlist.json."""
-    data = {str(uid): True for uid in sorted(ids)}
+    # читаем текущий файл, чтобы не потерять false
+    existing = {}
+    if os.path.exists(ALLOWLIST_FILE):
+        try:
+            with open(ALLOWLIST_FILE, encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+
+    new_data = {}
+
+    # сохраняем явные false
+    for key, value in existing.items():
+        if key.startswith("_"):
+            continue
+        if value is False:
+            new_data[key] = False
+
+    # добавляем/перезаписываем true
+    for uid in sorted(ids):
+        new_data[str(uid)] = True
+
     with open(ALLOWLIST_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(new_data, f, ensure_ascii=False, indent=2)
 
 
 allowed_user_ids = load_allowlist()
