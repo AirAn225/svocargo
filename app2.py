@@ -42,6 +42,98 @@ log = logging.getLogger(__name__)
 print(f"[DEBUG] BASE_DIR = {BASE_DIR}")
 print(f"[DEBUG] files here: {os.listdir(BASE_DIR)}")
 ####################################################################
+# ───────────────────────────────────────────────────────────
+# ALLOW-LIST
+# ───────────────────────────────────────────────────────────
+ALLOWLIST_FILE = os.path.join(DATA_DIR, "allowlist.json")
+
+
+def load_allowlist() -> set:
+    """Читает allowlist.json. Возвращает set разрешённых user_id."""
+    if not os.path.exists(ALLOWLIST_FILE):
+        return {MY_CHAT_ID}
+
+    try:
+        with open(ALLOWLIST_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        log.exception("Ошибка чтения allowlist.json")
+        return {MY_CHAT_ID}
+
+    if not isinstance(data, dict):
+        log.warning("allowlist.json должен быть словарём, получен %s", type(data).__name__)
+        return {MY_CHAT_ID}
+
+    allowed = set()
+    for key, value in data.items():
+        if key.startswith("_"):      # на случай _comment, если захотите
+            continue
+        if value is True:
+            try:
+                allowed.add(int(key))
+            except ValueError:
+                log.warning("Некорректный ID в allowlist.json: %r", key)
+    return allowed or {MY_CHAT_ID}
+
+
+def save_allowlist(ids: set):
+    """Сохраняет set разрешённых ID в allowlist.json."""
+    data = {str(uid): True for uid in sorted(ids)}
+    with open(ALLOWLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+allowed_user_ids = load_allowlist()
+
+
+# ───────────────────────────────────────────────────────────
+# MIDDLEWARE
+# ───────────────────────────────────────────────────────────
+class AllowListMiddleware(telebot.BaseMiddleware):
+    def __init__(self, allowed_ids: set):
+        self.allowed_ids = allowed_ids
+        self.update_types = ['message', 'edited_message', 'callback_query']
+
+    def _get_user_id(self, obj):
+        user = getattr(obj, "from_user", None)
+        return getattr(user, "id", None)
+
+    def _is_private(self, obj) -> bool:
+        chat = getattr(obj, "chat", None)
+        if chat is not None:
+            return chat.type == "private"
+        inner = getattr(obj, "message", None)
+        if inner is not None:
+            return getattr(inner.chat, "type", None) == "private"
+        return False
+
+    def pre_process(self, message, data):
+        user_id = self._get_user_id(message)
+        if user_id in self.allowed_ids:
+            return   # разрешён — пропускаем
+
+        # не разрешён — отвечаем только в личке, чтобы не спамить в группах
+        if self._is_private(message):
+            try:
+                bot.send_message(
+                    message.chat.id,
+                    "🔒 Доступ к боту ограничен.\n"
+                    "Если вы считаете, что это ошибка — напишите администратору.",
+                )
+            except Exception:
+                log.exception("Не удалось отправить отказ пользователю %s", user_id)
+
+        return SkipHandler()
+
+    def post_process(self, message, data, exception):
+        pass
+
+
+# ───────────────────────────────────────────────────────────
+# ПОДКЛЮЧЕНИЕ (порядок важен!)
+# ───────────────────────────────────────────────────────────
+
+####################################################################
 # Настройки "технических работ"
 MAINTENANCE_INTERVALS = [
     (dtime(7, 30), dtime(7, 40)),
@@ -178,6 +270,7 @@ class TopicFilterMiddleware(telebot.BaseMiddleware):
 
 
 # Подключение middleware
+bot.setup_middleware(AllowListMiddleware(allowed_user_ids))
 bot.setup_middleware(MaintenanceMiddleware())
 bot.setup_middleware(MaintenanceCallbackMiddleware())
 bot.setup_middleware(TopicFilterMiddleware(
@@ -401,6 +494,27 @@ def send_info(message):
     else:
         sendinfo = "⚠️ Информация временно недоступна."
     reply(message, sendinfo, disable_web_page_preview=True, parse_mode="HTML")
+
+@bot.message_handler(commands=["allow"], func=lambda m: m.chat.id == MY_CHAT_ID)
+def allow_cmd(message):
+    try:
+        target = int(message.text.split()[1])
+        allowed_user_ids.add(target)
+        save_allowlist(allowed_user_ids)
+        bot.send_message(MY_CHAT_ID, f"✅ `{target}` добавлен в allow-list.")
+    except (IndexError, ValueError):
+        bot.send_message(MY_CHAT_ID, "Использование: `/allow <USER_ID>`", parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["disallow"], func=lambda m: m.chat.id == MY_CHAT_ID)
+def disallow_cmd(message):
+    try:
+        target = int(message.text.split()[1])
+        allowed_user_ids.discard(target)
+        save_allowlist(allowed_user_ids)
+        bot.send_message(MY_CHAT_ID, f"✅ `{target}` удалён из allow-list.")
+    except (IndexError, ValueError):
+        bot.send_message(MY_CHAT_ID, "Использование: `/disallow <USER_ID>`", parse_mode="Markdown")
 
 
 # --- ГОРЯЧИЕ РЕЙСЫ ---
