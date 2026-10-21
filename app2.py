@@ -605,86 +605,89 @@ def reply_to_user(message):
         bot.send_message(MY_CHAT_ID, f"❌ Ошибка: {e}")
 ############################################################
 
-
 @bot.message_handler(commands=['sayall'])
 def cmd_sayall(message):
-  user_id = message.from_user.id
+    user_id = message.from_user.id
 
-  # 1. Проверка прав администратора
-  if user_id not in MY_CHAT_ID:
-    bot.reply_to(message, '⛔ У вас нет прав для выполнения этой команды.')
-    return
+    # 1. Проверка прав (исправлено)
+    if user_id != MY_CHAT_ID:
+        bot.reply_to(message, '⛔ У вас нет прав для выполнения этой команды')
+        return
 
-  # 2. Получение текста рассылки
-  command_parts = message.text.split(maxsplit=1)
-  if len(command_parts) < 2:
-    bot.reply_to(
+    # 2. Текст рассылки
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        bot.reply_to(
+            message,
+            '⚠️ Напишите текст: `/sayall Внимание, важное объявление!`',
+            parse_mode='Markdown'
+        )
+        return
+    text_to_send = parts[1]
+
+    # 3. Файл
+    if not os.path.exists(USERS_FILE):
+        bot.reply_to(message, f'❌ Файл `{USERS_FILE}` не найден.')
+        return
+
+    # 4. Чтение ID
+    try:
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            user_ids = data
+        elif isinstance(data, dict):
+            user_ids = list(data.keys())
+        else:
+            user_ids = []
+    except Exception as e:
+        bot.reply_to(message, f'❌ Ошибка чтения JSON: {e}')
+        return
+
+    # Приводим к int, убираем дубликаты
+    try:
+        user_ids = list({int(x) for x in user_ids})
+    except ValueError:
+        bot.reply_to(message, '❌ В файле есть некорректные ID.')
+        return
+
+    if not user_ids:
+        bot.reply_to(message, '⚠️ Список пользователей пуст.')
+        return
+
+    # 5. Статус
+    status_msg = bot.reply_to(
         message,
-        '⚠️ Напишите текст для рассылки после команды.\nПример:\n`/sayall 🚀'
-        ' Внимание, важное объявление!`',
+        f'⏳ Начинаю рассылку для `{len(user_ids)}` пользователей...',
         parse_mode='Markdown',
     )
-    return
 
-  text_to_send = command_parts[1]
+    success = 0
+    fail = 0
 
-  # 3. Проверка существования файла
-  if not os.path.exists(USERS_FILE):
-    bot.reply_to(message, f'❌ Файл `{USERS_FILE}` не найден на сервере.')
-    return
+    # 6. Рассылка
+    for uid in user_ids:
+        try:
+            # отправляем БЕЗ parse_mode — чтобы избежать ошибок форматирования
+            bot.send_message(uid, text_to_send)
+            success += 1
+        except Exception as e:
+            # для отладки можно раскомментировать:
+            # print(f"FAIL {uid}: {e}")
+            fail += 1
+        time.sleep(0.05)  # защита от флуд-лимита
 
-  # 4. Чтение ID из JSON-файла
-  user_ids = []
-  try:
-    with open(USERS_FILE, 'r', encoding='utf-8') as f:
-      data = json.load(f)
-
-      # Если JSON — это список (например: ["12345", "67890"])
-      if isinstance(data, list):
-        user_ids = data
-
-      # Если JSON — это словарь с ключами-ID (например: {"12345": {...}, "67890": {...}})
-      elif isinstance(data, dict):
-        user_ids = list(data.keys())
-
-  except Exception as e:
-    bot.reply_to(message, f'❌ Ошибка чтения JSON файла: {e}')
-    return
-
-  if not user_ids:
-    bot.reply_to(message, '⚠️ Список пользователей в файле пуст.')
-    return
-
-  # 5. Статус для админа
-  status_msg = bot.reply_to(
-      message,
-      f'⏳ Начинаю рассылку для `{len(user_ids)}` пользователей...',
-      parse_mode='Markdown',
-  )
-
-  success_count = 0
-  fail_count = 0
-
-  # 6. Рассылка сообщений
-  for uid in user_ids:
-    try:
-      bot.send_message(uid, text_to_send, parse_mode='Markdown')
-      success_count += 1
-    except Exception:
-      # Сюда попадут те, кто заблокировал бота
-      fail_count += 1
-
-  # 7. Итоговый отчет
-  bot.edit_message_text(
-      chat_id=message.chat.id,
-      message_id=status_msg.message_id,
-      text=(
-          '✅ **Рассылка завершена!**\n\n'
-          f'• Успешно доставлено: `{success_count}`\n'
-          f'• Ошибок (заблокировали бота): `{fail_count}`'
-      ),
-      parse_mode='Markdown',
-  )
+    # 7. Итог
+    bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=status_msg.message_id,
+        text=(
+            '✅ **Рассылка завершена**\n\n'
+            f'• Успешно доставлено: `{success}`\n'
+            f'• Ошибок (заблокировали бота / неверный ID): `{fail}`'
+        ),
+        parse_mode='Markdown',
+    )
 ############################################################
 if __name__ == "__main__":
     print("Бот запущен!")
