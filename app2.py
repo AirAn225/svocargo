@@ -609,84 +609,64 @@ def reply_to_user(message):
 def cmd_sayall(message):
     user_id = message.from_user.id
 
-    # 1. Проверка прав (исправлено)
+    # 1. Проверка прав (ИСПРАВЛЕНО)
     if user_id != MY_CHAT_ID:
         bot.reply_to(message, '⛔ У вас нет прав для выполнения этой команды')
         return
 
-    # 2. Текст рассылки
+    # 2. Получение текста
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        bot.reply_to(
-            message,
-            '⚠️ Напишите текст: `/sayall Внимание, важное объявление!`',
-            parse_mode='Markdown'
-        )
+        bot.reply_to(message, '⚠️ Напишите текст: `/sayall Текст`', parse_mode='Markdown')
         return
     text_to_send = parts[1]
 
-    # 3. Файл
+    # 3. Чтение файла
     if not os.path.exists(USERS_FILE):
         bot.reply_to(message, f'❌ Файл `{USERS_FILE}` не найден.')
         return
 
-    # 4. Чтение ID
     try:
         with open(USERS_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        if isinstance(data, list):
-            user_ids = data
-        elif isinstance(data, dict):
-            user_ids = list(data.keys())
+            
+        if isinstance(data, dict):
+            user_ids = [int(uid) for uid in data.keys()] # ← вот тут магия
+        elif isinstance(data, list):
+            user_ids = [int(uid) for uid in data]
         else:
             user_ids = []
+            
     except Exception as e:
         bot.reply_to(message, f'❌ Ошибка чтения JSON: {e}')
-        return
-
-    # Приводим к int, убираем дубликаты
-    try:
-        user_ids = list({int(x) for x in user_ids})
-    except ValueError:
-        bot.reply_to(message, '❌ В файле есть некорректные ID.')
         return
 
     if not user_ids:
         bot.reply_to(message, '⚠️ Список пользователей пуст.')
         return
 
-    # 5. Статус
-    status_msg = bot.reply_to(
-        message,
-        f'⏳ Начинаю рассылку для `{len(user_ids)}` пользователей...',
-        parse_mode='Markdown',
-    )
-
-    success = 0
-    fail = 0
-
-    # 6. Рассылка
+    # 4. Рассылка
+    status_msg = bot.reply_to(message, f'⏳ Начинаю рассылку для {len(user_ids)} пользователей...')
+    
+    success_count = 0
+    fail_count = 0
+    
     for uid in user_ids:
         try:
-            # отправляем БЕЗ parse_mode — чтобы избежать ошибок форматирования
+            # Отправляем без parse_mode, чтобы Markdown в тексте не сломал рассылку
             bot.send_message(uid, text_to_send)
-            success += 1
+            success_count += 1
         except Exception as e:
-            # для отладки можно раскомментировать:
-            # print(f"FAIL {uid}: {e}")
-            fail += 1
-        time.sleep(0.05)  # защита от флуд-лимита
+            fail_count += 1
+            print(f"Не доставлено {uid}: {e}", flush=True) # Для отладки
+            
+        time.sleep(0.05) # Защита от лимитов Telegram (не более 20 сообщений в секунду)
 
-    # 7. Итог
+    # 5. Отчет
     bot.edit_message_text(
         chat_id=message.chat.id,
         message_id=status_msg.message_id,
-        text=(
-            '✅ **Рассылка завершена**\n\n'
-            f'• Успешно доставлено: `{success}`\n'
-            f'• Ошибок (заблокировали бота / неверный ID): `{fail}`'
-        ),
-        parse_mode='Markdown',
+        text=f'✅ Рассылка завершена.\n\nУспешно: {success_count}\nОшибок: {fail_count}'
     )
 ############################################################
 if __name__ == "__main__":
