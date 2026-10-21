@@ -21,7 +21,7 @@ os.makedirs(DATA_DIR, exist_ok=True)   # ← ИЗМЕНЕНО: создаём п
 logfile = os.path.join(DATA_DIR, "bot.log")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GETSCHEDULE_PATH   = os.path.join(BASE_DIR, "getschedule.py")
-FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24.py")
+FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24v2.py")
 TZ = ZoneInfo("Europe/Moscow")
 
 # ← ИЗМЕНЕНО: правильное форматирование print
