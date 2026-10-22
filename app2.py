@@ -10,6 +10,7 @@ import logging
 import subprocess
 import sys
 import time
+import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 ####################################################################
@@ -414,7 +415,9 @@ def get_main_keyboard():
     btn_feedback = types.KeyboardButton("💌Написать админу💌")
     btn_gethot = types.KeyboardButton("🔥Список горячих рейсов🔥")
     btn_info = types.KeyboardButton("📃Информация о боте📃")
+    btn_metar = types.KeyboardButton("🛬 METAR Шереметьево☀️")
     keyboard.row(btn_gethot)
+    keyboard.row(btn_metar)
     keyboard.row(btn_info, btn_feedback)
     return keyboard
 
@@ -425,6 +428,63 @@ def start_cmd(message):
     # ← ИЗМЕНЕНО: reply() вместо send_message()
     reply(message, "Главное меню", reply_markup=get_main_keyboard())
     save_user(message.from_user)
+
+# ─── НАСТРОЙКИ КУЛДАУНОВ ───
+metar_cooldowns = {}
+COOLDOWN_SECONDS = 60     # 60 сек для одного пользователя
+GLOBAL_COOLDOWN = 10      # 10 сек для всех пользователей (защита IP)
+last_global_metar_request = 0 # Глобальная переменная для всего сервера
+
+@bot.message_handler(func=lambda msg: msg.text == "🛬 METAR Шереметьево☀️")
+def send_metar(message):
+    global last_global_metar_request
+    user_id = message.from_user.id
+    now = time.time()
+
+    # 1. Проверка личного кулдауна
+    if now - metar_cooldowns.get(user_id, 0) < COOLDOWN_SECONDS:
+        wait_time = int(COOLDOWN_SECONDS - (now - metar_cooldowns.get(user_id, 0)))
+        reply(message, f"⏳ Не так быстро. Подождите ещё {wait_time} сек. Запросы METAR можно делать раз в минуту.")
+        return
+
+    # 2. Проверка глобального кулдауна (защита от спама с разных аккаунтов)
+    if now - last_global_metar_request < GLOBAL_COOLDOWN:
+        reply(message, "⏳ Сервер обрабатывает другой запрос. Подождите пару секунд.")
+        return
+
+    # 3. Обновляем таймеры (запрос разрешён)
+    metar_cooldowns[user_id] = now
+    last_global_metar_request = now
+
+    # 4. Запрос к API
+    wait_msg = reply(message, "⏳ Запрашиваю METAR для UUEE...")
+    
+    url = "https://aviationweather.gov/api/data/metar"
+    params = {
+        "ids": "UUEE",
+        "format": "raw",
+        "taf": "false"
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        metar_text = response.text.strip()
+        if not metar_text:
+            metar_text = "⚠️ Данные METAR временно недоступны."
+
+        bot.delete_message(wait_msg.chat.id, wait_msg.message_id)
+        reply(
+            message,
+            f"📡 **METAR Шереметьево (UUEE):**\n\n`{metar_text}`",
+            parse_mode="Markdown"
+        )
+
+    except Exception as e:
+        bot.delete_message(wait_msg.chat.id, wait_msg.message_id)
+        reply(message, f"❌ Не удалось получить METAR. Ошибка: {e}")
+
 
 
 # --- ФИДБЕК ---
