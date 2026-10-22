@@ -116,7 +116,7 @@ slovar = {"WZ":'Red Wings', "QE":'FARS QESHM', "U3":'Sky Gates', "VI":'Volga-Dne
           "DZ":'Algerian Air', "AL":'TransAviaExport', "GL":'Gelix',"G6":'', "S5":'Abakan Air',
           "XX":'ALPHA CRUX', "JS":'Air Koryo', "SH":'Qeshm Air', "IR":'Iran Air',
           "W5":'Mahan Air', "T5":'Turkmenistan', "VN":'Vietnam Airlines', "R3":'Yakutia', "UJ":'AlMasria', "FG":'Ariana Afghan Airlines',
-         "RF":'E-Cargo', "V8":"Atran"}
+         "RF":'E-Cargo', "V8":'Atran', "B2":'Belarus - Government (Belavia)'}
 
 page = f'  🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n  🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
 page2 = ' ━━━━━━━━━━━━━━━━━━━━  \n 🎨 СПЕЦЛИВРЕИ ✨ \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
