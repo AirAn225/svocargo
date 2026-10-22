@@ -32,7 +32,7 @@ with open(schedulefile, "r", encoding="utf-8") as f:
 for i in range(len(air)):
     company = str(((air[i]).get("flight_number"))[:2])
     status = str((air[i]).get("status"))
-    if company not in ("SU", "0E", "UZ", "S7", "FV", "DP", "JP", "5N", "D2", "U6", "RL", "A4", "E7", "UT", "N4", "EO", "B2", "4B") and status == "PLN":
+    if company not in ("SU", "0E", "UZ", "S7", "FV", "DP", "JP", "5N", "D2", "U6", "RL", "A4", "E7", "UT", "N4", "EO", "4B") and status == "PLN":
         sortsp.append(air[i])
 sortedfile = os.path.join(DATA_DIR, 'sorted.json')
 with open(sortedfile, "w", encoding="utf-8") as fxx:
@@ -48,12 +48,13 @@ for ij in range(len(air)):
     dest = str(air[ij].get("destination"))
     company = str(((air[ij]).get("flight_number"))[:2])
     aircraft = str((air[ij]).get("aircraft_type"))
-    if company in ("WZ", "QE", "U3", "VI", "DZ", "AL", "GL", "FG", "G6", "XX", "JS", "SH", "IR", "W5", "T5", "VN", "R3", "UJ", "YC", "V8", "RF") or aircraft in ("CCX", "CL3"):
+    if company in ("WZ", "QE", "U3", "VI", "DZ", "AL", "GL", "FG", "G6", "XX", "JS", "SH", "IR", "W5", "T5", "VN", "R3", "UJ", "YC", "V8", "RF", "B2") or aircraft in ("CCX", "CL3"):
         if company == "VN" and dest == "SVO":
             arr.append(air[ij])
         if company == "VN" and dest != "SVO":
             dep.append(air[ij])
-        notcheck.append(air[ij])
+        if company != "B2" or (company == "B2" and aircraft == "CCX"):
+            notcheck.append(air[ij])
     elif dest == "SVO":
         arr.append(air[ij])
     else:
