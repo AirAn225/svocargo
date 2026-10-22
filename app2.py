@@ -415,7 +415,7 @@ def get_main_keyboard():
     btn_feedback = types.KeyboardButton("💌Написать админу💌")
     btn_gethot = types.KeyboardButton("🔥Список горячих рейсов🔥")
     btn_info = types.KeyboardButton("📃Информация о боте📃")
-    btn_metar = types.KeyboardButton("🛬 METAR Шереметьево☀️")
+    btn_metar = types.KeyboardButton("☀️METAR Шереметьево☀️")
     keyboard.row(btn_gethot)
     keyboard.row(btn_metar)
     keyboard.row(btn_info, btn_feedback)
@@ -435,7 +435,8 @@ COOLDOWN_SECONDS = 60     # 60 сек для одного пользовател
 GLOBAL_COOLDOWN = 10      # 10 сек для всех пользователей (защита IP)
 last_global_metar_request = 0 # Глобальная переменная для всего сервера
 
-@bot.message_handler(func=lambda msg: msg.text == "🛬 METAR Шереметьево☀️")
+@bot.message_handler(func=lambda msg: msg.text == "☀️METAR Шереметьево☀️")
+@bot.message_handler(commands=["metar"])
 def send_metar(message):
     global last_global_metar_request
     user_id = message.from_user.id
