@@ -38,91 +38,109 @@ HEADERS = {
 }
 
 
+def is_expired(dt_input, hours_limit=3):
+    """Проверяет, прошло ли больше hours_limit часов с момента dt_input."""
+    TZ = ZoneInfo("Europe/Moscow")
+
+    # Если передали строку — парсим её
+    if isinstance(dt_input, str):
+        try:
+            # Здесь может быть ваш формат, например "%Y-%m-%d %H:%M:%S"
+            dt = datetime.strptime(dt_input, "%Y-%m-%d %H:%M:%S").replace(tzinfo=TZ)
+        except ValueError:
+            return False
+    else:
+        # Если передали datetime — используем как есть
+        dt = dt_input
+
+    # Защита от сравнения naive и aware дат (на всякий случай)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ)
+
+    return (datetime.now(TZ) - dt) > timedelta(hours=hours_limit)
+
 def load_json(filepath):
-  try:
-    with open(filepath, 'r', encoding='utf-8') as f:
-      return json.load(f)
-  except (FileNotFoundError, json.JSONDecodeError):
-    return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
 
 
 def save_json(filepath, data):
-  with open(filepath, 'w', encoding='utf-8') as f:
-    json.dump(data, f, ensure_ascii=False, indent=4)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 
 def parse_flight_time(time_str):
-  TZ = ZoneInfo('Europe/Moscow')
-  if not time_str:
+    TZ = ZoneInfo('Europe/Moscow')
+    if not time_str:
+        return None
+    clean_str = str(time_str).strip()
+    formats = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%H:%M']
+    for fmt in formats:
+        try:
+            if fmt == '%H:%M':
+                today = datetime.now(TZ).strftime('%Y-%m-%d')
+                return datetime.strptime(f'{today} {clean_str}', '%Y-%m-%d %H:%M')
+            return datetime.strptime(clean_str[:19], fmt)
+        except ValueError:
+            continue
     return None
-  clean_str = str(time_str).strip()
-  formats = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%H:%M']
-  for fmt in formats:
-    try:
-      if fmt == '%H:%M':
-        today = datetime.now(TZ).strftime('%Y-%m-%d')
-        return datetime.strptime(f'{today} {clean_str}', '%Y-%m-%d %H:%M')
-      return datetime.strptime(clean_str[:19], fmt)
-    except ValueError:
-      continue
-  return None
 
 
 def fetch_fr24_flight(flight_number):
-  clean_num = str(flight_number).replace(' ', '').upper()
-  url = (
-      f'https://api.flightradar24.com/common/v1/flight/list.json'
-      f'?query={clean_num}&fetchBy=flight&page=1&limit=10'
-  )
+    clean_num = str(flight_number).replace(' ', '').upper()
+    url = (
+        f'https://api.flightradar24.com/common/v1/flight/list.json'
+        f'?query={clean_num}&fetchBy=flight&page=1&limit=10'
+    )
 
-  try:
-    time.sleep(random.uniform(2.0, 4.0))
-    response = requests.get(url, headers=HEADERS, timeout=7)
-    if response.status_code == 200:
-      res = response.json().get('result', {}).get('response', {})
-      return res.get('data', []) or []
-  except Exception as e:
-    print(f'❌ Ошибка сети при запросе {clean_num}: {e}')
-  return []
+    try:
+        time.sleep(random.uniform(2.0, 4.0))
+        response = requests.get(url, headers=HEADERS, timeout=7)
+        if response.status_code == 200:
+            res = response.json().get('result', {}).get('response', {})
+            return res.get('data', []) or []
+    except Exception as e:
+        print(f'❌ Ошибка сети при запросе {clean_num}: {e}')
+    return []
 
 
 def fetch_fr24_by_registration(registration):
-  clean_reg = str(registration).strip().upper()
-  url = (
-      f'https://api.flightradar24.com/common/v1/flight/list.json'
-      f'?query={clean_reg}&fetchBy=reg&page=1&limit=10'
-  )
+    clean_reg = str(registration).strip().upper()
+    url = (
+        f'https://api.flightradar24.com/common/v1/flight/list.json'
+        f'?query={clean_reg}&fetchBy=reg&page=1&limit=10'
+    )
 
-  try:
-    time.sleep(random.uniform(2.0, 4.0))
-    response = requests.get(url, headers=HEADERS, timeout=7)
-    if response.status_code == 200:
-      res = response.json().get('result', {}).get('response', {})
-      return res.get('data', []) or []
-  except Exception as e:
-    print(f'❌ Ошибка сети при запросе истории борта {clean_reg}: {e}')
-  return []
+    try:
+        time.sleep(random.uniform(2.0, 4.0))
+        response = requests.get(url, headers=HEADERS, timeout=7)
+        if response.status_code == 200:
+            res = response.json().get('result', {}).get('response', {})
+            return res.get('data', []) or []
+    except Exception as e:
+        print(f'❌ Ошибка сети при запросе истории борта {clean_reg}: {e}')
+    return []
 
-
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
-    """Возвращает: reg, airline_name, is_special, aircraft_type, date_matched, has_reg"""
     TZ = ZoneInfo('Europe/Moscow')
+
     if not fr24_data:
         return None, '', False, None, False, False
 
     target_date_str = target_dt.strftime('%Y-%m-%d') if target_dt else None
     now = datetime.now(TZ)
 
-    # Сначала ищем запись с известным бортом
-    fallback = None  # (reg, airline, is_special, type) — борт известен, но дата/время не сошлись
-    
+    fallback = None
     for item in fr24_data:
         aircraft_data = item.get('aircraft') or {}
         airline_data = item.get('airline') or {}
         time_data = item.get('time') or {}
+        if item.get('aircraft', {}).get('registration') == 'НУЖНЫЙ_БОРТ':  # или просто print для всех
+            print(json.dumps(item, indent=2, ensure_ascii=False))
 
         reg = aircraft_data.get('registration')
         if not reg:
@@ -135,92 +153,110 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        # ИЗВЛЕКАЕМ ВРЕМЯ из данных (вместо несуществующей scheduled_ts)
+        # 1. Пытаемся достать timestamp (время вылета/прилета)
         scheduled_ts = time_data.get('scheduled') or time_data.get('real') or time_data.get('estimated')
 
-        if not scheduled_ts:
-            # Борт известен, но времени нет — запомним как fallback
+        if scheduled_ts:
+            flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
+
+            # Проверка на "старый" рейс
+            if is_expired(flight_dt, hours_limit=4):
+                continue  # рейс 5 дней назад — отбрасываем
+
+            if flight_dt > now + timedelta(days=2):
+                continue  # слишком далеко в будущем — отбрасываем
+
+            flight_date_str = flight_dt.strftime('%Y-%m-%d')
+            if target_date_str and flight_date_str == target_date_str:
+                return reg, airline_name, is_special, aircraft_type, True, True
+
+            # Если время есть, но дата не наша — запомним на всякий случай
             if fallback is None:
                 fallback = (reg, airline_name, is_special, aircraft_type)
             continue
 
-        # Конвертируем timestamp в дату с часовым поясом
-        flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
+        # 2. Времени нет. Пытаемся достать хотя бы дату рейса из данных API
+        # (Flightradar24 часто отдает 'date' или 'scheduled_date' в других полях)
+        raw_date = (
+                time_data.get('scheduled_date') or
+                item.get('date') or
+                item.get('scheduled_date')
+        )
 
-        # ⚠️ ГЛАВНАЯ ЗАЩИТА: отбрасываем старые рейсы (те, что были 5 дней назад)
-        # Если рейс был больше 4 часов назад — пропускаем его
-        if is_expired(flight_dt, hours_limit=4):
-            continue
+        if raw_date:
+            # Если дата есть — проверяем её
+            # (формат обычно 'YYYY-MM-DD' или 'YYYY-MM-DD HH:MM:SS')
+            date_str = str(raw_date)[:10]
+            if target_date_str and date_str != target_date_str:
+                continue  # дата не совпадает — отбрасываем
+            else:
+                # Дата совпала — но точного времени нет. Возвращаем сразу
+                return reg, airline_name, is_special, aircraft_type, True, True
 
-        # Отбрасываем рейсы, которые слишком далеко в будущем (больше 2 дней)
-        if flight_dt > now + timedelta(days=2):
-            continue
-
-        flight_date_str = flight_dt.strftime('%Y-%m-%d')
-
-        # Проверяем, совпадает ли дата с целевой
-        if target_date_str and flight_date_str == target_date_str:
-            return reg, airline_name, is_special, aircraft_type, True, True
+        # 3. Нет ни времени, ни даты. Это "слепой" рейс.
+        # Скорее всего, он ещё не назначен или данные неполные.
+        # Запоминаем как fallback, но не приоритетно
+        if fallback is None:
+            fallback = (reg, airline_name, is_special, aircraft_type)
 
     if fallback:
-        # Борт известен, но дата/время не совпали (или это старый рейс)
         return (*fallback, False, True)
 
     return None, '', False, None, False, False
 
 
 def normalize_flight_num(raw_num):
-  if not raw_num:
-    return ''
-  clean = str(raw_num).replace(' ', '').upper()
-  if len(clean) > 2:
-    prefix = clean[:2]
-    digits = clean[2:].lstrip('0')
-    return prefix + (digits if digits else '0')
-  return clean
+    if not raw_num:
+        return ''
+    clean = str(raw_num).replace(' ', '').upper()
+    if len(clean) > 2:
+        prefix = clean[:2]
+        digits = clean[2:].lstrip('0')
+        return prefix + (digits if digits else '0')
+    return clean
 
 
 def get_next_flight_from_reg_history(reg_data, arrival_dt, remaining_departures):
-  if not reg_data or not remaining_departures:
+    if not reg_data or not remaining_departures:
+        return None
+
+    TZ = ZoneInfo('Europe/Moscow')
+    dep_dict = {}
+    for dep in remaining_departures:
+        raw_num = dep.get('flight_number', '')
+        norm_num = normalize_flight_num(raw_num)
+        dep_dict[norm_num] = dep
+
+    for item in reg_data:
+        identification = item.get('identification') or {}
+        number_data = identification.get('number') or {}
+        flight_code = number_data.get('default') or identification.get('callsign')
+
+        if not flight_code:
+            continue
+
+        norm_fr24_num = normalize_flight_num(flight_code)
+
+        if norm_fr24_num in dep_dict:
+            time_data = item.get('time') or {}
+            dep_ts = time_data.get('scheduled', {}).get('departure') or time_data.get(
+                'estimated', {}
+            ).get('departure')
+
+            if dep_ts and arrival_dt:
+                dep_dt = datetime.fromtimestamp(dep_ts, tz=TZ)
+                if dep_dt.tzinfo is None:
+                    dep_dt = dep_dt.replace(tzinfo=TZ)
+                arrival_dt = arrival_dt.replace(tzinfo=TZ)
+
+                # Здесь сохраняем небольшое логичное условие разворота (вылет не раньше чем за час до прилёта)
+                if dep_dt >= arrival_dt - timedelta(hours=1):
+                    print(f'🔗 Найден разворотный рейс: {flight_code}')
+                    return dep_dict[norm_fr24_num]
+            else:
+                return dep_dict[norm_fr24_num]
+
     return None
-
-  TZ = ZoneInfo('Europe/Moscow')
-  dep_dict = {}
-  for dep in remaining_departures:
-    raw_num = dep.get('flight_number', '')
-    norm_num = normalize_flight_num(raw_num)
-    dep_dict[norm_num] = dep
-
-  for item in reg_data:
-    identification = item.get('identification') or {}
-    number_data = identification.get('number') or {}
-    flight_code = number_data.get('default') or identification.get('callsign')
-
-    if not flight_code:
-      continue
-
-    norm_fr24_num = normalize_flight_num(flight_code)
-
-    if norm_fr24_num in dep_dict:
-      time_data = item.get('time') or {}
-      dep_ts = time_data.get('scheduled', {}).get('departure') or time_data.get(
-          'estimated', {}
-      ).get('departure')
-
-      if dep_ts and arrival_dt:
-        dep_dt = datetime.fromtimestamp(dep_ts, tz=TZ)
-        if dep_dt.tzinfo is None:
-          dep_dt = dep_dt.replace(tzinfo=TZ)
-        arrival_dt = arrival_dt.replace(tzinfo=TZ)
-
-        # Здесь сохраняем небольшое логичное условие разворота (вылет не раньше чем за час до прилёта)
-        if dep_dt >= arrival_dt - timedelta(hours=1):
-          print(f'🔗 Найден разворотный рейс: {flight_code}')
-          return dep_dict[norm_fr24_num]
-      else:
-        return dep_dict[norm_fr24_num]
-
-  return None
 
 
 def process_flights():
@@ -364,7 +400,7 @@ def process_flights():
 
 
 if __name__ == '__main__':
-  save_json(SPECIAL_FILE, [])
-  process_flights()
-  time.sleep(2)
-  subprocess.run([sys.executable, 'nocheck.py'])
+    save_json(SPECIAL_FILE, [])
+    process_flights()
+    time.sleep(2)
+    subprocess.run([sys.executable, 'nocheck.py'])
