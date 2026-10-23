@@ -104,6 +104,9 @@ def fetch_fr24_by_registration(registration):
   return []
 
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
     """Возвращает: reg, airline_name, is_special, aircraft_type, date_matched, has_reg"""
     TZ = ZoneInfo('Europe/Moscow')
@@ -111,9 +114,11 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         return None, '', False, None, False, False
 
     target_date_str = target_dt.strftime('%Y-%m-%d') if target_dt else None
+    now = datetime.now(TZ)
 
     # Сначала ищем запись с известным бортом
     fallback = None  # (reg, airline, is_special, type) — борт известен, но дата/время не сошлись
+    
     for item in fr24_data:
         aircraft_data = item.get('aircraft') or {}
         airline_data = item.get('airline') or {}
@@ -130,11 +135,8 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        scheduled_dict = time_data.get('scheduled', {})
-        if flight_type == 'arrival':
-            scheduled_ts = scheduled_dict.get('arrival') or scheduled_dict.get('departure')
-        else:
-            scheduled_ts = scheduled_dict.get('departure') or scheduled_dict.get('arrival')
+        # ИЗВЛЕКАЕМ ВРЕМЯ из данных (вместо несуществующей scheduled_ts)
+        scheduled_ts = time_data.get('scheduled') or time_data.get('real') or time_data.get('estimated')
 
         if not scheduled_ts:
             # Борт известен, но времени нет — запомним как fallback
@@ -142,14 +144,26 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
                 fallback = (reg, airline_name, is_special, aircraft_type)
             continue
 
+        # Конвертируем timestamp в дату с часовым поясом
         flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
+
+        # ⚠️ ГЛАВНАЯ ЗАЩИТА: отбрасываем старые рейсы (те, что были 5 дней назад)
+        # Если рейс был больше 4 часов назад — пропускаем его
+        if is_expired(flight_dt, hours_limit=4):
+            continue
+
+        # Отбрасываем рейсы, которые слишком далеко в будущем (больше 2 дней)
+        if flight_dt > now + timedelta(days=2):
+            continue
+
         flight_date_str = flight_dt.strftime('%Y-%m-%d')
 
+        # Проверяем, совпадает ли дата с целевой
         if target_date_str and flight_date_str == target_date_str:
             return reg, airline_name, is_special, aircraft_type, True, True
 
     if fallback:
-        # Борт известен, но дата/время не совпали
+        # Борт известен, но дата/время не совпали (или это старый рейс)
         return (*fallback, False, True)
 
     return None, '', False, None, False, False
