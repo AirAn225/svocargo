@@ -137,9 +137,7 @@ def get_word(iata):
     # Метод .get() вернет слово, а если буквы нет в словаре — вернет сообщение об ошибке
     return slovar.get(iata.upper(), "Private Owner")
 
-if len(airspecial) == 0:
-    page2 = page2 + f'  📭 На {get_formatted_date()} редких ливрей нет.\n \n Подождите, пока бот обновит информацию, или возращайтесь завтра, {tomorrow_date()}!)😊  \n \n'
-else:
+if len(airspecial) != 0:
     for k in airspecial:
         fn = k.get("flight_number")
         iata = k.get("flight_number")[:2]
@@ -151,9 +149,7 @@ else:
         page2 = page2 + f'{iata} · {aircraft}\n  🎨{livery}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n'
 
 
-if len(airsplanes) == 0:
-    page = page + f'  📭 На {get_formatted_date()} редких рейсов нет.\n \n Уверен, что {tomorrow_date()} они появятся! \n \n'
-else:
+if len(airsplanes) != 0:
     for kk in airsplanes:
         fn = kk.get("flight_number")
         aircraft = kk.get("aircraft_type")
@@ -166,9 +162,7 @@ else:
         else:
             page = page + f'{iata} {airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n'
 
-if len(fr24_splanes) == 0:
-    page1_5 = page1_5 + f'  📭 Пока что даже Лукойла не ожидается( \n Подождите немного, пока информация обновится, или приходите завтра =) \n \n'
-else:
+if len(fr24_splanes) != 0:
     for kkk in fr24_splanes:
         fn = kkk.get("flight_number")
         airline = kkk.get("airline")
