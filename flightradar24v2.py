@@ -239,9 +239,7 @@ def get_next_flight_from_reg_history(reg_data, arrival_dt, remaining_departures)
 
         if norm_fr24_num in dep_dict:
             time_data = item.get('time') or {}
-            dep_ts = time_data.get('scheduled', {}).get('departure') or time_data.get(
-                'estimated', {}
-            ).get('departure')
+            dep_ts = time_data.get('scheduled') or time_data.get('estimated')
 
             if dep_ts and arrival_dt:
                 dep_dt = datetime.fromtimestamp(dep_ts, tz=TZ)
