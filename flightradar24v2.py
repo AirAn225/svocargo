@@ -111,15 +111,15 @@ def fetch_fr24_flight(flight_number):
     return []
 
 
-def analyze_fr24_data(fr24_data, target_dt):
-    """Анализирует данные с FR24. Возвращает кортеж: (reg, airline, is_special, type, date_matched, has_reg)"""
-    if not fr24_data:
+def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
+    TZ = ZoneInfo('Europe/Moscow')
+
+    if not fr24_data or not target_dt:
         return None, '', False, None, False, False
 
-    target_date_str = target_dt.strftime('%Y-%m-%d') if target_dt else None
+    target_date_str = target_dt.strftime('%Y-%m-%d')
     now = datetime.now(TZ)
 
-    fallback = None
     for item in fr24_data:
         aircraft_data = item.get('aircraft') or {}
         airline_data = item.get('airline') or {}
@@ -136,41 +136,43 @@ def analyze_fr24_data(fr24_data, target_dt):
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        # Безопасно достаем время
+        # --- 1. ЕСЛИ ВРЕМЯ ЕСТЬ ---
         raw_scheduled = time_data.get('scheduled') or time_data.get('real') or time_data.get('estimated')
         scheduled_ts = extract_timestamp(raw_scheduled)
 
         if scheduled_ts:
             flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
 
+            # Отбрасываем старые рейсы (5 дней назад)
             if is_expired(flight_dt, hours_limit=4):
-                continue # Старый рейс
+                continue
+                
+            # Отбрасываем слишком далекие будущие рейсы
             if flight_dt > now + timedelta(days=2):
-                continue # Слишком далеко в будущем
+                continue
 
-            flight_date_str = flight_dt.strftime('%Y-%m-%d')
-            if target_date_str and flight_date_str == target_date_str:
+            # Проверяем СТРОГО по дате (без проверки времени!)
+            if flight_dt.strftime('%Y-%m-%d') == target_date_str:
                 return reg, airline_name, is_special, aircraft_type, True, True
-
-            if fallback is None:
-                fallback = (reg, airline_name, is_special, aircraft_type)
             continue
 
-        # Если времени нет, ищем дату
+        # --- 2. ЕСЛИ ВРЕМЕНИ НЕТ (рейс без назначения) ---
+        # Ищем дату в других полях
         raw_date = time_data.get('scheduled_date') or item.get('date') or item.get('scheduled_date')
+        
         if raw_date:
-            date_str = str(raw_date)[:10]
-            if target_date_str and date_str != target_date_str:
-                continue
-            else:
+            date_str = str(raw_date)[:10] # обрезаем до "YYYY-MM-DD"
+            if date_str == target_date_str:
+                # Дата совпала, времени нет — это тот самый рейс!
                 return reg, airline_name, is_special, aircraft_type, True, True
+            continue # Дата не совпала — идем дальше
+            
+        # --- 3. ЕСЛИ НЕТ НИ ВРЕМЕНИ, НИ ДАТЫ ---
+        # Это "слепой" рейс. Скорее всего, он еще не назначен.
+        # Мы не можем проверить его дату, поэтому НЕ берем его как результат.
+        continue
 
-        if fallback is None:
-            fallback = (reg, airline_name, is_special, aircraft_type)
-
-    if fallback:
-        return (*fallback, False, True)
-
+    # Если ничего не нашли с правильной датой
     return None, '', False, None, False, False
 
 
