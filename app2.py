@@ -673,14 +673,14 @@ def cmd_run_fr24(message):
 
     # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    script_path = os.path.join(BASE_DIR, "flightradar24v2.py")
+    frscript_path = os.path.join(BASE_DIR, "flightradar24v2.py")
 
     # Проверяем, существует ли файл
-    if not os.path.exists(script_path):
+    if not os.path.exists(frscript_path):
         bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=status_msg.message_id,
-            text=f"❌ Ошибка: файл `flightradar24v2.py` не найден по пути `{script_path}`."
+            text=f"❌ Ошибка: файл `flightradar24v2.py` не найден по пути `{frscript_path}`."
         )
         return
 
@@ -689,7 +689,7 @@ def cmd_run_fr24(message):
         # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
         # либо можно перенаправить их в файл логов.
         process = subprocess.Popen(
-            [sys.executable, script_path],
+            [sys.executable, frscript_path],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
@@ -712,6 +712,54 @@ def cmd_run_fr24(message):
             parse_mode="Markdown"
         )
         log.exception("Ошибка при ручном запуске flightradar24v2.py")
+############################################################
+############################################################
+@bot.message_handler(commands=['gets'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
+def cmd_run_fr24(message):
+    # 1. Отправляем сообщение, что запуск начался
+    status_msg = bot.reply_to(message, "⏳ Запускаю `getschedule.py` в фоне. Это может занять пару минут...", parse_mode="Markdown")
+
+    # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    gets_path = os.path.join(BASE_DIR, "getschedule.py")
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(gets_path):
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Ошибка: файл `getschedule.py` не найден по пути `{gets_path}`."
+        )
+        return
+
+    try:
+        # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
+        # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
+        # либо можно перенаправить их в файл логов.
+        process = subprocess.Popen(
+            [sys.executable, gets_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        # 4. Сообщаем пользователю, что всё ок
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"✅ Скрипт успешно запущен в фоне!\n\nPID процесса: `{process.pid}`\n\n_Результаты появятся в файлах, когда скрипт завершит работу._",
+            parse_mode="Markdown"
+        )
+        log.info(f"Админ запустил getschedule.py вручную. PID: {process.pid}")
+        
+    except Exception as e:
+        # Если произошла ошибка при запуске
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Не удалось запустить скрипт. Ошибка:\n`{e}`",
+            parse_mode="Markdown"
+        )
+        log.exception("Ошибка при ручном запуске getschedule.py")
 ############################################################
 
 @bot.message_handler(commands=['sayall'])
