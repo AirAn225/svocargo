@@ -10,6 +10,7 @@ import logging
 import subprocess
 import sys
 import time
+import html
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -23,6 +24,7 @@ logfile = os.path.join(DATA_DIR, "bot.log")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GETSCHEDULE_PATH   = os.path.join(BASE_DIR, "getschedule.py")
 FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24v2.py")
+aircraft_card_file = os.path.join(DATA_DIR, "aircraft_card.json")
 TZ = ZoneInfo("Europe/Moscow")
 
 # ← ИЗМЕНЕНО: правильное форматирование print
@@ -390,6 +392,55 @@ def save_user(user):
 
 
 #####################################################################################
+def send_aircraft_card(bot, message, registration):
+    # Читаем базу карточек
+    try:
+        with open(aircraft_card_file, "r", encoding="utf-8") as file:
+            aircraft_cards = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        bot.reply_to(message, "Не удалось открыть базу карточек.")
+        return
+
+    # Ищем самолёт по регистрации
+    aircraft = next(
+        (
+            item for item in aircraft_cards
+            if item["registration"].upper() == registration.upper()
+        ),
+        None
+    )
+
+    if aircraft is None:
+        bot.reply_to(
+            message,
+            f"Карточка самолёта {registration} не найдена."
+        )
+        return
+
+    # Подготавливаем данные
+    registration = html.escape(aircraft["registration"])
+    airline = html.escape(aircraft["airline"])
+    livery = html.escape(aircraft["livery"])
+    aircraft_type = html.escape(aircraft["aircraft_type"])
+    type_code = html.escape(aircraft.get("type_code", "—"))
+    mode_s = html.escape(aircraft.get("mode_s", "—"))
+
+    caption = (
+        "✈️ <b>AIRCRAFT PROFILE</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"🛩 <b>{registration}</b>\n"
+        f"<b>{airline}</b>\n"
+        f"🎨 {livery}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"📋 <b>Aircraft:</b> {aircraft_type}\n"
+        f"🔖 <b>Type:</b> {type_code}\n"
+        f"📡 <b>Mode S:</b> {mode_s}\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "✈️ <i>AIRCRAFT DATABASE</i>"
+    )
+#####################################################################################
+
+#####################################################################################
 # --- СПИСОК БАНОВ ---
 def load_banned_users() -> set:
     if os.path.exists(BAN_FILE):
@@ -485,9 +536,30 @@ def send_metar(message):
     except Exception as e:
         bot.delete_message(wait_msg.chat.id, wait_msg.message_id)
         reply(message, f"❌ Не удалось получить METAR. Ошибка: {e}")
+#####################################################################################
+#####################################################################################
+@bot.message_handler(commands=["aircraft"])
+def aircraft_command(message):
+    args = message.text.split()
 
+    if len(args) != 2:
+        bot.reply_to(
+            message,
+            "Укажите регистрацию самолёта.\n"
+            "Пример: /aircraft B-306N"
+        )
+        return
 
+    registration = args[1].upper()
 
+    bot.send_photo(
+        chat_id,
+        photo=aircraft["photo"],
+        caption=caption,
+        parse_mode="HTML"
+    )
+#####################################################################################
+#####################################################################################
 # --- ФИДБЕК ---
 @bot.message_handler(func=lambda msg: msg.text == "💌Написать админу💌")
 @bot.message_handler(commands=["feedback"])
