@@ -541,6 +541,7 @@ def send_metar(message):
 @bot.message_handler(commands=["aircraft"])
 def aircraft_command(message):
     args = message.text.split()
+    chat_id=message.chat.id
 
     if len(args) != 2:
         bot.reply_to(
