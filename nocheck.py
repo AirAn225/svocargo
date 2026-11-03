@@ -146,7 +146,7 @@ if len(airspecial) != 0:
         livery = k.get("livery")
         route = k.get("origin_destination")
         tag = k.get("status")
-        page2 = page2 + f'{iata} · {aircraft}\n  🎨{livery}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n'
+        page2 = page2 + f"{iata} · {aircraft}\n  🎨{livery}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 
 if len(airsplanes) != 0:
@@ -158,9 +158,9 @@ if len(airsplanes) != 0:
         route = kk.get("origin_destination")
         airline = slovar.get(iata, "Private Owner")
         if airline == "Private Owner":
-            page = page + f'{airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n'
+            page = page + f"{airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
         else:
-            page = page + f'{iata} {airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n'
+            page = page + f"{iata} {airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 if len(fr24_splanes) != 0:
     for kkk in fr24_splanes:
@@ -177,7 +177,7 @@ if len(fr24_splanes) != 0:
             dest = "SVO"
             orig = kkk.get("origin")
 
-        page1_5 = page1_5 + f'⚠️ {airline} · {aircraft} · {reg}\n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n'
+        page1_5 = page1_5 + f"⚠️ {airline} · {aircraft} · '{reg}' \n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n"
 
 
 endpage = page + page1_5 + page2 + '@uueeappr_bot'
