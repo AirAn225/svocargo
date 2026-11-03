@@ -136,41 +136,29 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        # --- ИЩЕМ ВРЕМЯ В РАЗНЫХ ПОЛЯХ ---
-        # Для летящих рейсов часто заполнено 'real' (фактическое), а не 'scheduled'
+        # --- ЕСЛИ ВРЕМЯ ЕСТЬ (например, рейс уже сел или точное расписание) ---
         raw_scheduled = time_data.get('scheduled') or time_data.get('real') or time_data.get('estimated')
         scheduled_ts = extract_timestamp(raw_scheduled)
 
-        # Если нашли время
         if scheduled_ts:
             flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
-            if item.get('aircraft', {}).get('registration'): # Если борт вообще есть
-            print(f"DEBUG Борт найден в API: {item.get('aircraft').get('registration')}, time_data = {time_data}")
-            # 1. Жесткая проверка: если рейс был больше 4 часов назад — отбрасываем
-            if is_expired(flight_dt, hours_limit=4):
+
+            # Отсекаем только откровенно старые рейсы (были 5 дней назад)
+            if is_expired(flight_dt, hours_limit=24): 
                 continue
                 
-            # 2. Проверка на будущее (больше 2 дней — отбрасываем)
-            if flight_dt > now + timedelta(days=2):
-                continue
-
-            # 3. Проверка по дате (день должен совпадать)
+            # Проверяем ТОЛЬКО дату
             if flight_dt.strftime('%Y-%m-%d') == target_date_str:
-                # Дополнительно можно проверить, что разница во времени не больше 6-8 часов
-                # (чтобы не взять утренний рейс вместо вечернего)
-                time_diff = abs((flight_dt - target_dt).total_seconds())
-                if time_diff < 8 * 3600: # 8 часов
-                    return reg, airline_name, is_special, aircraft_type, True, True
-                else:
-                    print(f"⚠️ {reg}: дата совпала, но время сильно отличается. API: {flight_dt}, Таргет: {target_dt}")
+                return reg, airline_name, is_special, aircraft_type, True, True
             
             continue
 
-        # --- ЕСЛИ ВРЕМЕНИ ВООБЩЕ НЕТ (рейс без назначения) ---
+        # --- ЕСЛИ ВРЕМЕНИ НЕТ (рейс летит, борт назначен) ---
+        # Ищем дату в других полях
         raw_date = time_data.get('scheduled_date') or item.get('date') or item.get('scheduled_date')
         
         if raw_date:
-            date_str = str(raw_date)[:10]
+            date_str = str(raw_date)[:10] # формат "YYYY-MM-DD"
             if date_str == target_date_str:
                 return reg, airline_name, is_special, aircraft_type, True, True
             continue
