@@ -136,43 +136,44 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        # --- 1. ЕСЛИ ВРЕМЯ ЕСТЬ ---
+        # --- ИЩЕМ ВРЕМЯ В РАЗНЫХ ПОЛЯХ ---
+        # Для летящих рейсов часто заполнено 'real' (фактическое), а не 'scheduled'
         raw_scheduled = time_data.get('scheduled') or time_data.get('real') or time_data.get('estimated')
         scheduled_ts = extract_timestamp(raw_scheduled)
 
+        # Если нашли время
         if scheduled_ts:
             flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
 
-            # Отбрасываем старые рейсы (5 дней назад)
+            # 1. Жесткая проверка: если рейс был больше 4 часов назад — отбрасываем
             if is_expired(flight_dt, hours_limit=4):
                 continue
                 
-            # Отбрасываем слишком далекие будущие рейсы
+            # 2. Проверка на будущее (больше 2 дней — отбрасываем)
             if flight_dt > now + timedelta(days=2):
                 continue
 
-            # Проверяем СТРОГО по дате (без проверки времени!)
+            # 3. Проверка по дате (день должен совпадать)
             if flight_dt.strftime('%Y-%m-%d') == target_date_str:
-                return reg, airline_name, is_special, aircraft_type, True, True
+                # Дополнительно можно проверить, что разница во времени не больше 6-8 часов
+                # (чтобы не взять утренний рейс вместо вечернего)
+                time_diff = abs((flight_dt - target_dt).total_seconds())
+                if time_diff < 8 * 3600: # 8 часов
+                    return reg, airline_name, is_special, aircraft_type, True, True
+                else:
+                    print(f"⚠️ {reg}: дата совпала, но время сильно отличается. API: {flight_dt}, Таргет: {target_dt}")
+            
             continue
 
-        # --- 2. ЕСЛИ ВРЕМЕНИ НЕТ (рейс без назначения) ---
-        # Ищем дату в других полях
+        # --- ЕСЛИ ВРЕМЕНИ ВООБЩЕ НЕТ (рейс без назначения) ---
         raw_date = time_data.get('scheduled_date') or item.get('date') or item.get('scheduled_date')
         
         if raw_date:
-            date_str = str(raw_date)[:10] # обрезаем до "YYYY-MM-DD"
+            date_str = str(raw_date)[:10]
             if date_str == target_date_str:
-                # Дата совпала, времени нет — это тот самый рейс!
                 return reg, airline_name, is_special, aircraft_type, True, True
-            continue # Дата не совпала — идем дальше
-            
-        # --- 3. ЕСЛИ НЕТ НИ ВРЕМЕНИ, НИ ДАТЫ ---
-        # Это "слепой" рейс. Скорее всего, он еще не назначен.
-        # Мы не можем проверить его дату, поэтому НЕ берем его как результат.
-        continue
+            continue
 
-    # Если ничего не нашли с правильной датой
     return None, '', False, None, False, False
 
 
