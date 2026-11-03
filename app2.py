@@ -438,6 +438,14 @@ def send_aircraft_card(bot, message, registration):
         "━━━━━━━━━━━━━━━━━━\n"
         "✈️ <i>AIRCRAFT DATABASE</i>"
     )
+
+    bot.send_photo(
+        message.chat.id,
+        photo=aircraft["photo"],
+        caption=caption,
+        parse_mode="HTML"
+    )
+    
 #####################################################################################
 
 #####################################################################################
@@ -553,12 +561,7 @@ def aircraft_command(message):
 
     registration = args[1].upper()
 
-    bot.send_photo(
-        chat_id,
-        photo=aircraft["photo"],
-        caption=caption,
-        parse_mode="HTML"
-    )
+    send_aircraft_card(bot, message, registration)
 #####################################################################################
 #####################################################################################
 # --- ФИДБЕК ---
