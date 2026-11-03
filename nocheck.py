@@ -145,8 +145,9 @@ if len(airspecial) != 0:
         time = k.get("estimated_time")[11:]
         livery = k.get("livery")
         route = k.get("origin_destination")
+        reg = k.get("registration")
         tag = k.get("status")
-        page2 = page2 + f"{iata} · {aircraft}\n  🎨{livery}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
+        page2 = page2 + f"{iata} · {aircraft} · '{reg}'\n  ▸{livery}🎨\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 
 if len(airsplanes) != 0:
