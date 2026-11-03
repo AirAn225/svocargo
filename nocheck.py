@@ -113,14 +113,15 @@ with open(specialfile, "w", encoding="utf-8") as file2:
 print("Табло успешно отсортировано по хронологии авиакомпаний!")
 
 slovar = {"WZ":'Red Wings', "QE":'FARS QESHM', "U3":'Sky Gates', "VI":'Volga-Dnepr',
-          "DZ":'Algerian Air', "AL":'TransAviaExport', "GL":'Gelix',"G6":'', "S5":'Abakan Air',
+          "DZ":'Algerian Air', "AL":'TransAviaExport', "GL":'Gelix', "S5":'Abakan Air',
           "XX":'ALPHA CRUX', "JS":'Air Koryo', "SH":'Qeshm Air', "IR":'Iran Air',
           "W5":'Mahan Air', "T5":'Turkmenistan', "VN":'Vietnam Airlines', "R3":'Yakutia', "UJ":'AlMasria', "FG":'Ariana Afghan Airlines',
          "RF":'E-Cargo', "V8":'Atran', "B2":'Belarus - Government (Belavia)'}
 
-page = f'  🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n  🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
-page2 = ' ━━━━━━━━━━━━━━━━━━━━  \n 🎨 СПЕЦЛИВРЕИ ✨ \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
-page1_5 = ' ━━━━━━━━━━━━━━━━━━━━  \n ✈️ Табло FLIGHTRADAR24 📡 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
+page = ""
+page2 = ""
+page1_5 = ""
+
 with open(specialfile, "r", encoding="utf-8") as filespecial:
     airspecial = json.load(filespecial)
 
@@ -136,8 +137,11 @@ with open(frsplanesfile, "r", encoding="utf-8") as filefrsplanes:
 def get_word(iata):
     # Метод .get() вернет слово, а если буквы нет в словаре — вернет сообщение об ошибке
     return slovar.get(iata.upper(), "Private Owner")
+    
+
 
 if len(airspecial) != 0:
+    page += f'🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
     for k in airspecial:
         fn = k.get("flight_number")
         iata = k.get("flight_number")[:2]
@@ -151,6 +155,7 @@ if len(airspecial) != 0:
 
 
 if len(airsplanes) != 0:
+    page2 += f' ━━━━━━━━━━━━━━━━━━━━  \n 🎨 СПЕЦЛИВРЕИ ✨ \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
     for kk in airsplanes:
         fn = kk.get("flight_number")
         aircraft = kk.get("aircraft_type")
@@ -164,6 +169,7 @@ if len(airsplanes) != 0:
             page = page + f"{iata} {airline} · {aircraft}\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 if len(fr24_splanes) != 0:
+    page1_5 += f' ━━━━━━━━━━━━━━━━━━━━  \n ✈️ Табло FLIGHTRADAR24 📡 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
     for kkk in fr24_splanes:
         fn = kkk.get("flight_number")
         airline = kkk.get("airline")
@@ -181,7 +187,10 @@ if len(fr24_splanes) != 0:
         page1_5 = page1_5 + f"⚠️ {airline} · {aircraft} · '{reg}' \n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n"
 
 
-endpage = page + page1_5 + page2 + '@uueeappr_bot'
+endpage = f'🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n' + page + page1_5 + page2 + '@uueeappr_bot'
+if len(airspecial) == 0 and len(airsplanes) == 0 and len(fr24_splanes) == 0:
+    endpage += "Сегодня ничего интересного нет. \n Приходите завтра! 😴"
+
 hottabfile = os.path.join(DATA_DIR, 'hot-tab.txt')
 with open(hottabfile, 'w', encoding='utf-8') as hottab:
     hottab.write(endpage)
