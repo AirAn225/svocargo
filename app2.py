@@ -608,7 +608,7 @@ def send_hot(message):
             sendhot = f.read()
     else:
         sendhot = "⚠️ Информация временно недоступна."
-    reply(message, sendhot, disable_web_page_preview=True, parse_mode="HTML")
+    reply(message, sendhot, disable_web_page_preview=True, parse_mode="Markdown")
 
 
 # --- БАН / РАЗБАН ---
