@@ -144,7 +144,8 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         # Если нашли время
         if scheduled_ts:
             flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
-
+            if item.get('aircraft', {}).get('registration'): # Если борт вообще есть
+            print(f"DEBUG Борт найден в API: {item.get('aircraft').get('registration')}, time_data = {time_data}")
             # 1. Жесткая проверка: если рейс был больше 4 часов назад — отбрасываем
             if is_expired(flight_dt, hours_limit=4):
                 continue
