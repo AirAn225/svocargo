@@ -791,7 +791,7 @@ def cmd_run_fr24(message):
 ############################################################
 ############################################################
 @bot.message_handler(commands=['gets'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
-def cmd_run_fr24(message):
+def cmd_run_schedule(message):
     # 1. Отправляем сообщение, что запуск начался
     status_msg = bot.reply_to(message, "⏳ Запускаю `getschedule.py` в фоне. Это может занять пару минут...", parse_mode="Markdown")
 
@@ -836,6 +836,55 @@ def cmd_run_fr24(message):
             parse_mode="Markdown"
         )
         log.exception("Ошибка при ручном запуске getschedule.py")
+
+
+@bot.message_handler(commands=['reloadhot'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
+def cmd_run_reloadhot(message):
+    # 1. Отправляем сообщение, что запуск начался
+    status_msg = bot.reply_to(message, "⏳ Запускаю `nocheck.py` в фоне. Это может занять пару минут...", parse_mode="Markdown")
+
+    # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    gets_path = os.path.join(BASE_DIR, "nocheck.py")
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(gets_path):
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Ошибка: файл `nocheck.py` не найден по пути `{gets_path}`."
+        )
+        return
+
+    try:
+        # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
+        # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
+        # либо можно перенаправить их в файл логов.
+        process = subprocess.Popen(
+            [sys.executable, gets_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        # 4. Сообщаем пользователю, что всё ок
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"✅ Скрипт успешно запущен в фоне!\n\nPID процесса: `{process.pid}`\n\n_Результаты появятся в файлах, когда скрипт завершит работу._",
+            parse_mode="Markdown"
+        )
+        log.info(f"Админ запустил nocheck.py вручную. PID: {process.pid}")
+        
+    except Exception as e:
+        # Если произошла ошибка при запуске
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Не удалось запустить скрипт. Ошибка:\n`{e}`",
+            parse_mode="Markdown"
+        )
+        log.exception("Ошибка при ручном запуске nocheck.py")
+
 ############################################################
 
 @bot.message_handler(commands=['sayall'])
