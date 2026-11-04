@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import random
@@ -124,59 +124,57 @@ def extract_registration(item):
     
     return None
 
-def analyze_fr24_data(fr24_data, target_dt):
-    """Ищет борт на конкретную дату (без проверки времени)."""
+
+def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
     if not fr24_data or not target_dt:
         return None, '', False, None, False, False
 
-    # Получаем строку даты, которую мы ищем (например, "2026-11-03")
     target_date_str = target_dt.strftime('%Y-%m-%d')
 
     for item in fr24_data:
-        # 1. Пытаемся найти борт
-        reg = extract_registration(item)
+        # 1. Ищем борт
+        aircraft_data = item.get('aircraft') or {}
+        reg = aircraft_data.get('registration') or item.get('reg') or (item.get('identification') or {}).get('registration')
+        
         if not reg:
             continue
 
-        # 2. Достаем данные для вывода (авиакомпания, тип)
-        airline_data = item.get('airline') or {}
-        airline_name = airline_data.get('name') or ''
-        aircraft_type = (item.get('aircraft') or {}).get('code')
-        
+        # 2. Достаем название авиакомпании и тип
+        airline_name = (item.get('airline') or {}).get('name') or ''
+        aircraft_type = (item.get('aircraft') or {}).get('model', {}).get('code') or aircraft_data.get('code')
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        # 3. Ищем дату рейса в разных полях (как строку)
+        # 3. Достаем дату (без времени)
         time_data = item.get('time') or {}
+        raw_date = time_data.get('scheduled_date') or time_data.get('scheduled') or item.get('date')
         
-        # В старом API дата обычно лежит в time.scheduled как timestamp или строка.
-        # Если это число (timestamp), нам все равно придется его конвертировать, 
-        # но мы конвертируем только в строку без учета часового пояса.
-        raw_date = (
-            time_data.get('scheduled_date') or 
-            time_data.get('scheduled') or 
-            item.get('date') or 
-            item.get('scheduled_date')
-        )
+        # Если вдруг scheduled — это словарь {'utc': ...}
+        if isinstance(raw_date, dict):
+            raw_date = raw_date.get('utc') or raw_date.get('local')
 
         if not raw_date:
             continue
 
-        # Если пришел timestamp (число) — переводим в дату по UTC
-        if isinstance(raw_date, (int, float)) or (isinstance(raw_date, str) and raw_date.isdigit()):
-            # Используем UTC, чтобы дата не прыгала из-за часового пояса сервера
-            date_str = datetime.fromtimestamp(int(raw_date), tz=timezone.utc).strftime('%Y-%m-%d')
-        else:
-            # Если пришла строка, просто отрезаем первые 10 символов (YYYY-MM-DD)
-            date_str = str(raw_date)[:10]
+        # 4. Конвертируем дату в строку YYYY-MM-DD
+        try:
+            if isinstance(raw_date, (int, float)) or (isinstance(raw_date, str) and raw_date.isdigit()):
+                date_str = datetime.fromtimestamp(int(raw_date), tz=timezone.utc).strftime('%Y-%m-%d')
+            else:
+                date_str = str(raw_date)[:10]
+        except Exception as e:
+            print(f"Ошибка парсинга даты {raw_date}: {e}")
+            continue
 
-        # 4. Сравниваем даты
+        # --- ЖЕСТКАЯ ОТЛАДКА ---
+        # Если борт нашелся, но дата не совпала, выведем это (только для нужного рейса)
+        if target_date_str in str(item): 
+            print(f"🔎 [DEBUG] Борт {reg}. Дата в API: '{date_str}' (сырое: {raw_date}), Ищем: '{target_date_str}'")
+        
         if date_str == target_date_str:
-            # Если борт нашелся, вернули его
             return reg, airline_name, is_special, aircraft_type, True, True
 
     return None, '', False, None, False, False
-
 
 def normalize_flight_num(raw_num):
     if not raw_num:
