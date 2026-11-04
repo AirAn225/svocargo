@@ -28,8 +28,8 @@ def get_aircraft_photo(registration):
             timeout=30
         )
 
-        print(f"HTTP статус: {response.status_code}")
-        print(f"Запрос: {response.url}")
+        log.info(f"HTTP статус: {response.status_code}")
+        log.info(f"Запрос: {response.url}")
 
         response.raise_for_status()
 
@@ -49,11 +49,11 @@ def get_aircraft_photo(registration):
 
 
     except requests.exceptions.RequestException as error:
-        print(f"Ошибка запроса: {error}")
+        log.error(f"Ошибка запроса: {error}")
 
     except ValueError:
-        print("JetAPI вернул ответ, который не удалось прочитать как JSON.")
-        print(response.text)
+        log.error("JetAPI вернул ответ, который не удалось прочитать как JSON.")
+        log.error(response.text)
 
     response = requests.get(
         "https://www.jetapi.dev/api",
@@ -71,9 +71,9 @@ def get_aircraft_photo(registration):
     url = images[0]['Image'] if images else None
 
     if url:
-        print(url)
+        log.info(url)
     else:
-        print("Изображений нет")
+        log.warning("Изображений нет")
     #print(REGISTRATION)
 
     try:
@@ -98,7 +98,7 @@ def get_aircraft_photo(registration):
                 json.dump(allcards, cardfile, ensure_ascii=False, indent=2)
 
     except FileNotFoundError:
-        print("Ошибка: Файл aircraft_card.json не найден.")
+        log.error("Ошибка: Файл aircraft_card.json не найден.")
         exit()
 
 if __name__ == "__main__":
