@@ -25,6 +25,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GETSCHEDULE_PATH   = os.path.join(BASE_DIR, "getschedule.py")
 FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24v2.py")
 aircraft_card_file = os.path.join(DATA_DIR, "aircraft_card.json")
+requestcard_file = os.path.join(DATA_DIR, "getcard.txt")
 TZ = ZoneInfo("Europe/Moscow")
 
 # ← ИЗМЕНЕНО: правильное форматирование print
@@ -888,6 +889,18 @@ def cmd_run_reloadhot(message):
 
 @bot.message_handler(commands=['getcard'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
 def cmd_run_getcard(message):
+    args = message.text.split()
+    chat_id=message.chat.id
+
+    if len(args) != 2:
+        bot.reply_to(
+            message,
+            "Укажите регистрацию самолёта.\n"
+            "Пример: /aircraft B-306N"
+        )
+        return
+
+    registration_for_getcard = args[1].upper()
     # 1. Отправляем сообщение, что запуск начался
     status_msg = bot.reply_to(message, "⏳ Запускаю `get.py` в фоне. Это может занять пару минут...", parse_mode="Markdown")
 
@@ -903,6 +916,9 @@ def cmd_run_getcard(message):
             text=f"❌ Ошибка: файл `get.py` не найден по пути `{get_path}`."
         )
         return
+
+    with open(requestcard_file, 'w', encoding='utf-8') as f:
+        f.write(registration_for_getcard)          # то же самое, что и без write
 
     try:
         # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
