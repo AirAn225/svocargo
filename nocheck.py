@@ -150,7 +150,7 @@ if len(airspecial) != 0:
         livery = k.get("livery")
         route = k.get("origin_destination")
         reg = k.get("registration")
-        page2 = page2 + f"{iata} · {aircraft} · `{reg}`\n  ▸{livery}🎨\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
+        page2 = page2 + f"{iata} · {aircraft} · <code>{reg}<code> \n  ▸{livery}🎨\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 
 if len(airsplanes) != 0:
@@ -183,7 +183,7 @@ if len(fr24_splanes) != 0:
             dest = "SVO"
             orig = kkk.get("origin")
 
-        page1_5 = page1_5 + f"⚠️ {airline} · {aircraft} · `{reg}` \n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n"
+        page1_5 = page1_5 + f"⚠️ {airline} · {aircraft} · <code>{reg}<code> \n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n"
 
 
 endpage = f'🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n' + page + page1_5 + page2 + '@uueeappr_bot'
