@@ -476,7 +476,7 @@ def get_main_keyboard():
     btn_gethot = types.KeyboardButton("🔥Список горячих рейсов🔥")
     btn_info = types.KeyboardButton("📃Информация о боте📃")
     btn_metar = types.KeyboardButton("☀️METAR Шереметьево☀️")
-    btn_airplanecard = types.KeyboardButton("✈️Карточка самолёта✈️")
+    btn_airplanecard = types.KeyboardButton("✈️Карточка по бортовому✈️")
     keyboard.row(btn_gethot)
     keyboard.row(btn_airplanecard, btn_metar)
     keyboard.row(btn_info, btn_feedback)
@@ -548,7 +548,7 @@ def send_metar(message):
         reply(message, f"❌ Не удалось получить METAR. Ошибка: {e}")
 #####################################################################################
 #####################################################################################
-@bot.message_handler(func=lambda msg: msg.text == "✈️Карточка самолёта✈️")
+@bot.message_handler(func=lambda msg: msg.text == "✈️Карточка по бортовому✈️")
 @bot.message_handler(commands=["aircraft"])
 def aircraft_command(message):
     args = message.text.split()
