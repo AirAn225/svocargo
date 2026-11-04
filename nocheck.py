@@ -141,7 +141,7 @@ def get_word(iata):
 
 
 if len(airspecial) != 0:
-    page += f'🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
+    page2 += f' ━━━━━━━━━━━━━━━━━━━━  \n 🎨 СПЕЦЛИВРЕИ ✨ \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
     for k in airspecial:
         fn = k.get("flight_number")
         iata = k.get("flight_number")[:2]
@@ -155,7 +155,7 @@ if len(airspecial) != 0:
 
 
 if len(airsplanes) != 0:
-    page2 += f' ━━━━━━━━━━━━━━━━━━━━  \n 🎨 СПЕЦЛИВРЕИ ✨ \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
+    page1 += f'🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
     for kk in airsplanes:
         fn = kk.get("flight_number")
         aircraft = kk.get("aircraft_type")
