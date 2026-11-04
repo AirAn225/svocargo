@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
+import html
 import logging
 import os
 
@@ -149,8 +150,8 @@ if len(airspecial) != 0:
         time = k.get("estimated_time")[11:]
         livery = k.get("livery")
         route = k.get("origin_destination")
-        reg = k.get("registration")
-        page2 = page2 + f"{iata} · {aircraft} · <code>{reg}<code> \n  ▸{livery}🎨\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
+        reg = html.escape(k.get("registration"))
+        page2 = page2 + f"{iata} · {aircraft} · <code>{reg}</code> \n  ▸{livery}🎨\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 
 if len(airsplanes) != 0:
@@ -173,7 +174,7 @@ if len(fr24_splanes) != 0:
         fn = kkk.get("flight_number")
         airline = kkk.get("airline")
         aircraft = kkk.get("aircraft_type")
-        reg = kkk.get("registration")
+        reg = html.escape(kkk.get("registration"))
         time = kkk.get("scheduled_time")
 
         if kkk.get("origin") == "N/A":
@@ -183,7 +184,7 @@ if len(fr24_splanes) != 0:
             dest = "SVO"
             orig = kkk.get("origin")
 
-        page1_5 = page1_5 + f"⚠️ {airline} · {aircraft} · <code>{reg}<code> \n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n"
+        page1_5 = page1_5 + f"⚠️ {airline} · {aircraft} · <code>{reg}</code> \n  ▸ {fn}  {orig} ➜ {dest}  🕙  {time} \n \n"
 
 
 endpage = f'🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n' + page + page1_5 + page2 + '@uueeappr_bot'
