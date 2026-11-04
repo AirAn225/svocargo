@@ -111,57 +111,69 @@ def fetch_fr24_flight(flight_number):
     return []
 
 
-def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
-    TZ = ZoneInfo('Europe/Moscow')
+def extract_registration(item):
+    """Ищет борт во всех возможных полях ответа API."""
+    reg = (item.get('aircraft') or {}).get('registration')
+    if reg: return str(reg).strip().upper()
+    
+    reg = item.get('reg') or item.get('registration')
+    if reg: return str(reg).strip().upper()
+    
+    reg = (item.get('identification') or {}).get('registration')
+    if reg: return str(reg).strip().upper()
+    
+    return None
 
+def analyze_fr24_data(fr24_data, target_dt):
+    """Ищет борт на конкретную дату (без проверки времени)."""
     if not fr24_data or not target_dt:
         return None, '', False, None, False, False
 
+    # Получаем строку даты, которую мы ищем (например, "2026-11-03")
     target_date_str = target_dt.strftime('%Y-%m-%d')
-    now = datetime.now(TZ)
 
     for item in fr24_data:
-        aircraft_data = item.get('aircraft') or {}
-        airline_data = item.get('airline') or {}
-        time_data = item.get('time') or {}
-
-        reg = aircraft_data.get('registration')
+        # 1. Пытаемся найти борт
+        reg = extract_registration(item)
         if not reg:
             continue
 
+        # 2. Достаем данные для вывода (авиакомпания, тип)
+        airline_data = item.get('airline') or {}
         airline_name = airline_data.get('name') or ''
-        model_data = aircraft_data.get('model') or {}
-        aircraft_type = model_data.get('code') or aircraft_data.get('code')
-
+        aircraft_type = (item.get('aircraft') or {}).get('code')
+        
         keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
         is_special = any(kw in airline_name.lower() for kw in keywords)
 
-        # --- ЕСЛИ ВРЕМЯ ЕСТЬ (например, рейс уже сел или точное расписание) ---
-        raw_scheduled = time_data.get('scheduled') or time_data.get('real') or time_data.get('estimated')
-        scheduled_ts = extract_timestamp(raw_scheduled)
-
-        if scheduled_ts:
-            flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
-
-            # Отсекаем только откровенно старые рейсы (были 5 дней назад)
-            if is_expired(flight_dt, hours_limit=24): 
-                continue
-                
-            # Проверяем ТОЛЬКО дату
-            if flight_dt.strftime('%Y-%m-%d') == target_date_str:
-                return reg, airline_name, is_special, aircraft_type, True, True
-            
-            continue
-
-        # --- ЕСЛИ ВРЕМЕНИ НЕТ (рейс летит, борт назначен) ---
-        # Ищем дату в других полях
-        raw_date = time_data.get('scheduled_date') or item.get('date') or item.get('scheduled_date')
+        # 3. Ищем дату рейса в разных полях (как строку)
+        time_data = item.get('time') or {}
         
-        if raw_date:
-            date_str = str(raw_date)[:10] # формат "YYYY-MM-DD"
-            if date_str == target_date_str:
-                return reg, airline_name, is_special, aircraft_type, True, True
+        # В старом API дата обычно лежит в time.scheduled как timestamp или строка.
+        # Если это число (timestamp), нам все равно придется его конвертировать, 
+        # но мы конвертируем только в строку без учета часового пояса.
+        raw_date = (
+            time_data.get('scheduled_date') or 
+            time_data.get('scheduled') or 
+            item.get('date') or 
+            item.get('scheduled_date')
+        )
+
+        if not raw_date:
             continue
+
+        # Если пришел timestamp (число) — переводим в дату по UTC
+        if isinstance(raw_date, (int, float)) or (isinstance(raw_date, str) and raw_date.isdigit()):
+            # Используем UTC, чтобы дата не прыгала из-за часового пояса сервера
+            date_str = datetime.fromtimestamp(int(raw_date), tz=timezone.utc).strftime('%Y-%m-%d')
+        else:
+            # Если пришла строка, просто отрезаем первые 10 символов (YYYY-MM-DD)
+            date_str = str(raw_date)[:10]
+
+        # 4. Сравниваем даты
+        if date_str == target_date_str:
+            # Если борт нашелся, вернули его
+            return reg, airline_name, is_special, aircraft_type, True, True
 
     return None, '', False, None, False, False
 
