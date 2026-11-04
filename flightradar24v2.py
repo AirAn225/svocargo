@@ -163,13 +163,13 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
             else:
                 date_str = str(raw_date)[:10]
         except Exception as e:
-            print(f"Ошибка парсинга даты {raw_date}: {e}")
+            log.info(f"Ошибка парсинга даты {raw_date}: {e}")
             continue
 
         # --- ЖЕСТКАЯ ОТЛАДКА ---
         # Если борт нашелся, но дата не совпала, выведем это (только для нужного рейса)
         if target_date_str in str(item): 
-            print(f"🔎 [DEBUG] Борт {reg}. Дата в API: '{date_str}' (сырое: {raw_date}), Ищем: '{target_date_str}'")
+            log.info(f"🔎 [DEBUG] Борт {reg}. Дата в API: '{date_str}' (сырое: {raw_date}), Ищем: '{target_date_str}'")
         
         if date_str == target_date_str:
             return reg, airline_name, is_special, aircraft_type, True, True
