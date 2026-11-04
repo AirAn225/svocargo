@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import logging
 
 DATA_DIR = os.getenv('DATA_DIR', '/app/data')
 #getcard_path = 'getcard.txt'
