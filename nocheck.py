@@ -150,12 +150,11 @@ if len(airspecial) != 0:
         livery = k.get("livery")
         route = k.get("origin_destination")
         reg = k.get("registration")
-        tag = k.get("status")
         page2 = page2 + f"{iata} · {aircraft} · '{reg}'\n  ▸{livery}🎨\n  ▸ {fn}  {route[:3]} ➜ {route[4:]}  🕙  {time[:5]} \n \n"
 
 
 if len(airsplanes) != 0:
-    page1 += f'🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
+    page += f'🛬 РЕДКИЕ РЕЙСЫ 🛫 \n ━━━━━━━━━━━━━━━━━━━━ \n \n'
     for kk in airsplanes:
         fn = kk.get("flight_number")
         aircraft = kk.get("aircraft_type")
@@ -189,7 +188,7 @@ if len(fr24_splanes) != 0:
 
 endpage = f'🗓️ Расписание на {get_formatted_date()} \n ━━━━━━━━━━━━━━━━━━━━ \n' + page + page1_5 + page2 + '@uueeappr_bot'
 if len(airspecial) == 0 and len(airsplanes) == 0 and len(fr24_splanes) == 0:
-    endpage += "Сегодня ничего интересного нет. \n Приходите завтра! 😴"
+    endpage = "Сегодня ничего интересного нет. \n Приходите завтра! 😴"
 
 hottabfile = os.path.join(DATA_DIR, 'hot-tab.txt')
 with open(hottabfile, 'w', encoding='utf-8') as hottab:
