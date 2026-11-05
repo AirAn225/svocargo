@@ -131,27 +131,30 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
     if not fr24_data or not target_dt:
         return None, '', False, None, False, False
 
-    # Строка, которую мы ищем (например, "2026-11-03")
+    # Строка, которую мы ищем (например, "2026-11-04")
     target_date_str = target_dt.strftime('%Y-%m-%d')
 
     for item in fr24_data:
         time_data = item.get('time') or {}
         
-        # 1. Достаем нужный timestamp (прилет или вылет) из вложенного словаря
+        # 1. ЖЕСТКО выбираем ключ: для прилёта - arrival, для вылета - departure
         key = 'arrival' if flight_type == 'arrival' else 'departure'
         
         scheduled_ts = None
+        # Ищем время в порядке приоритета: scheduled -> estimated -> real
         for category in ['scheduled', 'estimated', 'real']:
             cat_data = time_data.get(category)
-            if isinstance(cat_data, dict) and cat_data.get(key):
-                scheduled_ts = cat_data[key]
-                break
+            if isinstance(cat_data, dict):
+                ts = cat_data.get(key)
+                if ts:
+                    scheduled_ts = ts
+                    break
         
-        # Если времени нет — идем дальше
+        # Если нужного времени (прилёта/вылета) нет — идем дальше
         if not scheduled_ts:
             continue
             
-        # 2. Проверяем ТОЛЬКО дату
+        # 2. Проверяем ТОЛЬКО дату в московском часовом поясе
         flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
         if flight_dt.strftime('%Y-%m-%d') != target_date_str:
             continue
