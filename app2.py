@@ -37,12 +37,43 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 # ← ИЗМЕНЕНО: info.txt и hot-tab.txt — рядом с кодом, а не в DATA_DIR
 INFO_FILE = os.path.join(DATA_DIR, "info.txt")
 HOTTAB_FILE = os.path.join(DATA_DIR, "hot-tab.txt")
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 log = logging.getLogger(__name__)
+
+import logging
+import os
+
+# ... (ваши переменные DATA_DIR, logfile и т.д.) ...
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
+
+# 1. Обработчик для ОБЩЕГО файла (всё подряд)
+file_handler_all = logging.FileHandler(logfile, encoding='utf-8')
+file_handler_all.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s", 
+    datefmt="%Y-%m-%d %H:%M:%S"
+))
+
+# 2. Обработчик для ФАЙЛА С КОМАНДАМИ
+commands_logfile = os.path.join(DATA_DIR, 'commands.log')
+file_handler_cmd = logging.FileHandler(commands_logfile, encoding='utf-8')
+file_handler_cmd.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s", 
+    datefmt="%Y-%m-%d %H:%M:%S"
+))
+
+# Класс-фильтр, который пропускает только сообщения с тегом [CMD]
+class CommandFilter(logging.Filter):
+    def filter(self, record):
+        # Пропускаем только те записи, где в тексте есть префикс [CMD]
+        return record.getMessage().startswith('[CMD]')
+
+# Вешаем фильтр на обработчик команд
+file_handler_cmd.addFilter(CommandFilter())
+
+# Добавляем оба обработчика к логгеру
+log.addHandler(file_handler_all)
+log.addHandler(file_handler_cmd)
 ####################################################################
 print(f"[DEBUG] BASE_DIR = {BASE_DIR}")
 print(f"[DEBUG] files here: {os.listdir(BASE_DIR)}")
@@ -114,6 +145,48 @@ allowed_user_ids = load_allowlist()
 # ───────────────────────────────────────────────────────────
 # MIDDLEWARE
 # ───────────────────────────────────────────────────────────
+# Создаем логгер (если он у вас уже есть — используйте его)
+
+class LoggingMiddleware(telebot.BaseMiddleware):
+    def __init__(self):
+        # Мы хотим перехватывать только обычные сообщения и нажатия кнопок
+        self.update_types = ['message', 'callback_query']
+
+    def pre_process(self, message, data):
+        # 1. Определяем, кто пишет
+        user = getattr(message, 'from_user', None)
+        if not user:
+            return
+
+        user_id = user.id
+        username = f"@{user.username}" if user.username else "без username"
+        name = user.first_name or "Пользователь"
+
+        # 2. Определяем тип события: обычный текст, команда или callback (кнопка)
+        if hasattr(message, 'data') and message.data:
+            # Это нажатие Inline-кнопки (callback_query)
+            action_type = "Нажатие кнопки (Callback)"
+            content = message.data
+        elif message.text:
+            # Это текст. Проверяем, команда ли это (начинается с /)
+            if message.text.startswith('/'):
+                action_type = "Команда"
+                content = f"[CMD] {message.text}"
+            else:
+                action_type = "Текст"
+            content = message.text
+        else:
+            # Это что-то другое (фото, стикер и т.д.)
+            action_type = "Вложение"
+            content = f"[{message.content_type}]"
+
+        # 3. Пишем в лог
+        log.info(f"👤 {name} ({username}, ID: {user_id}) | {action_type}: {content}")
+
+    def post_process(self, message, data, exception):
+        pass
+
+
 class AllowListMiddleware(telebot.BaseMiddleware):
     def __init__(self, allowed_ids: set):
         self.allowed_ids = allowed_ids
@@ -295,6 +368,7 @@ class TopicFilterMiddleware(telebot.BaseMiddleware):
 
 
 # Подключение middleware
+bot.setup_middleware(LoggingMiddleware())
 bot.setup_middleware(AllowListMiddleware(allowed_user_ids))
 bot.setup_middleware(MaintenanceMiddleware())
 bot.setup_middleware(MaintenanceCallbackMiddleware())
