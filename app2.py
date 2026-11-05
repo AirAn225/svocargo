@@ -38,36 +38,47 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 INFO_FILE = os.path.join(DATA_DIR, "info.txt")
 HOTTAB_FILE = os.path.join(DATA_DIR, "hot-tab.txt")
 
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
-
-# 1. Обработчик для ОБЩЕГО файла (всё подряд)
-file_handler_all = logging.FileHandler(logfile, encoding='utf-8')
-file_handler_all.setFormatter(logging.Formatter(
+# 1. Создаем форматтеры
+formatter_all = logging.Formatter(
     "%(asctime)s [%(levelname)s] %(name)s: %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
-))
-
-# 2. Обработчик для ФАЙЛА С КОМАНДАМИ
-commands_logfile = os.path.join(DATA_DIR, 'commands.log')
-file_handler_cmd = logging.FileHandler(commands_logfile, encoding='utf-8')
-file_handler_cmd.setFormatter(logging.Formatter(
+)
+formatter_cmd = logging.Formatter(
     "%(asctime)s [%(levelname)s] %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
-))
+)
 
-# Класс-фильтр, который пропускает только сообщения с тегом [CMD]
+# 2. Обработчик для ОБЩЕГО файла
+file_handler_all = logging.FileHandler(logfile, encoding='utf-8')
+file_handler_all.setFormatter(formatter_all)
+
+# 3. Обработчик для ФАЙЛА С КОМАНДАМИ
+commands_logfile = os.path.join(DATA_DIR, 'commands.log')
+file_handler_cmd = logging.FileHandler(commands_logfile, encoding='utf-8')
+file_handler_cmd.setFormatter(formatter_cmd)
+
+# 4. Фильтр для команд
 class CommandFilter(logging.Filter):
     def filter(self, record):
-        # Пропускаем только те записи, где в тексте есть префикс [CMD]
-        return record.getMessage().startswith('[CMD]')
+        # Пропускаем только сообщения с тегом [CMD]
+        return '[CMD]' in record.getMessage()
 
-# Вешаем фильтр на обработчик команд
 file_handler_cmd.addFilter(CommandFilter())
 
-# Добавляем оба обработчика к логгеру
-log.addHandler(file_handler_all)
-log.addHandler(file_handler_cmd)
+# 5. Получаем КОРНЕВОЙ логгер и настраиваем его
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# На всякий случай удаляем старые обработчики, если они были
+if root_logger.hasHandlers():
+    root_logger.handlers.clear()
+
+# Вешаем наши обработчики на корневой логгер
+root_logger.addHandler(file_handler_all)
+root_logger.addHandler(file_handler_cmd)
+
+# Ваш локальный логгер (для удобства)
+log = logging.getLogger(__name__)
 ####################################################################
 print(f"[DEBUG] BASE_DIR = {BASE_DIR}")
 print(f"[DEBUG] files here: {os.listdir(BASE_DIR)}")
