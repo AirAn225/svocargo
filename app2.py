@@ -37,12 +37,6 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 # ← ИЗМЕНЕНО: info.txt и hot-tab.txt — рядом с кодом, а не в DATA_DIR
 INFO_FILE = os.path.join(DATA_DIR, "info.txt")
 HOTTAB_FILE = os.path.join(DATA_DIR, "hot-tab.txt")
-log = logging.getLogger(__name__)
-
-import logging
-import os
-
-# ... (ваши переменные DATA_DIR, logfile и т.д.) ...
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
