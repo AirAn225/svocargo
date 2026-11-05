@@ -632,7 +632,7 @@ def aircraft_command(message):
         bot.reply_to(
             message,
             "Укажите регистрацию самолёта.\n"
-            "Пример: /aircraft B-306N"
+            "Пример: /ac B-306N"
         )
         return
 
