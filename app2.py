@@ -623,7 +623,7 @@ def send_metar(message):
 #####################################################################################
 #####################################################################################
 @bot.message_handler(func=lambda msg: msg.text == "✈️Карточка по бортовому✈️")
-@bot.message_handler(commands=["aircraft"])
+@bot.message_handler(commands=["ac"])
 def aircraft_command(message):
     args = message.text.split()
     chat_id=message.chat.id
