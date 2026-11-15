@@ -126,54 +126,95 @@ def extract_registration(item):
 
 
 def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
-    TZ = ZoneInfo('Europe/Moscow')
-
     if not fr24_data or not target_dt:
         return None, '', False, None, False, False
 
-    # Строка, которую мы ищем (например, "2026-11-04")
+    # Выбираем именно нужный этап рейса
+    if flight_type == 'arrival':
+        key = 'arrival'
+    elif flight_type == 'departure':
+        key = 'departure'
+    else:
+        log.error(f'Неизвестный тип рейса: {flight_type}')
+        return None, '', False, None, False, False
+
+    # Приводим дату к московскому часовому поясу
+    if target_dt.tzinfo is None:
+        target_dt = target_dt.replace(tzinfo=TZ)
+    else:
+        target_dt = target_dt.astimezone(TZ)
+
     target_date_str = target_dt.strftime('%Y-%m-%d')
+
+    date_matched = False
 
     for item in fr24_data:
         time_data = item.get('time') or {}
-        
-        # 1. ЖЕСТКО выбираем ключ: для прилёта - arrival, для вылета - departure
-        key = 'arrival' if flight_type == 'arrival' else 'departure'
-        
-        scheduled_ts = None
-        # Ищем время в порядке приоритета: scheduled -> estimated -> real
+
+        # Приоритет: расписание -> расчётное время -> фактическое время
+        flight_ts = None
+
         for category in ['scheduled', 'estimated', 'real']:
-            cat_data = time_data.get(category)
-            if isinstance(cat_data, dict):
-                ts = cat_data.get(key)
-                if ts:
-                    scheduled_ts = ts
-                    break
-        
-        # Если нужного времени (прилёта/вылета) нет — идем дальше
-        if not scheduled_ts:
+            category_data = time_data.get(category) or {}
+
+            if not isinstance(category_data, dict):
+                continue
+
+            ts = category_data.get(key)
+
+            if ts is not None:
+                flight_ts = ts
+                break
+
+        if flight_ts is None:
             continue
-            
-        # 2. Проверяем ТОЛЬКО дату в московском часовом поясе
-        flight_dt = datetime.fromtimestamp(scheduled_ts, tz=TZ)
+
+        try:
+            flight_dt = datetime.fromtimestamp(float(flight_ts), tz=TZ)
+        except (TypeError, ValueError, OSError):
+            continue
+
+        # Сравниваем только календарные даты
         if flight_dt.strftime('%Y-%m-%d') != target_date_str:
             continue
 
-        # 3. Дата совпала! Достаем остальные данные
+        date_matched = True
+
+        # Получаем данные самолёта
         aircraft_data = item.get('aircraft') or {}
         reg = aircraft_data.get('registration')
-        
-        # Если API не знает борт, возвращаем None (в process_flights возьмем из табло)
-        if not reg:
-            return None, '', False, None, True, False
 
-        airline_name = (item.get('airline') or {}).get('name') or ''
-        aircraft_type = (item.get('aircraft') or {}).get('model', {}).get('code')
-        
-        keywords = ['livery', '(', 'special', 'sticker', 'panda', 'expo', 'color']
-        is_special = any(kw in airline_name.lower() for kw in keywords)
+        # Если регистрации нет, проверяем следующую запись
+        if not reg:
+            continue
+
+        reg = str(reg).strip().upper()
+
+        airline_data = item.get('airline') or {}
+        airline_name = airline_data.get('name') or ''
+
+        model_data = aircraft_data.get('model') or {}
+
+        if isinstance(model_data, dict):
+            aircraft_type = model_data.get('code')
+        else:
+            aircraft_type = model_data
+
+        keywords = [
+            'livery', '(', 'special', 'sticker',
+            'panda', 'expo', 'color'
+        ]
+
+        is_special = any(
+            kw in airline_name.lower()
+            for kw in keywords
+        )
 
         return reg, airline_name, is_special, aircraft_type, True, True
+
+    # Дата совпала, но ни в одной подходящей записи нет регистрации
+    if date_matched:
+        return None, '', False, None, True, False
 
     return None, '', False, None, False, False
 
@@ -212,7 +253,9 @@ def process_flights():
 
         fr24_data = fetch_fr24_flight(flight_num)
 
-        (reg, airline_name, is_special, aircraft_type, date_matched, has_reg) = analyze_fr24_data(fr24_data, target_dt)
+        (reg, airline_name, is_special, aircraft_type, date_matched, has_reg) = analyze_fr24_data(
+    fr24_data, target_dt, flight_type='arrival'
+)
 
         if has_reg and (is_special or reg in known_special_regs):
             known_special_regs.add(reg)
@@ -244,7 +287,9 @@ def process_flights():
 
         fr24_data = fetch_fr24_flight(flight_num)
 
-        (reg, airline_name, is_special, aircraft_type, date_matched, has_reg) = analyze_fr24_data(fr24_data, target_dt)
+        (reg, airline_name, is_special, aircraft_type, date_matched, has_reg) = analyze_fr24_data(
+    fr24_data, target_dt, flight_type='departure'
+)
 
         if has_reg and (is_special or reg in known_special_regs):
             known_special_regs.add(reg)
