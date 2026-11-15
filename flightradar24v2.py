@@ -36,6 +36,37 @@ HEADERS = {
     'Referer': 'https://www.flightradar24.com/',
 }
 
+# Признаки спецливреи в названии авиакомпании FR24
+SPECIAL_KEYWORDS = [
+    '(',
+    'livery',
+    'special',
+    'sticker',
+    'panda',
+    'expo',
+    'color',
+    'skyteam',
+    'oneworld',
+    'star'
+]
+
+# Регистрации, которые не нужно показывать
+EXCLUDED_REGISTRATIONS = {
+    'RA-12345',
+    'B-12345',
+}
+
+# Слова и названия авиакомпаний, которые нужно исключить
+EXCLUDED_AIRLINE_KEYWORDS = [
+    'MChS',
+    'Russia',
+    'Squadron',
+    'Ministry',
+    '223',
+    '224',
+    
+]
+
 # ─── ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ───
 def is_expired(dt_input, hours_limit=4):
     """Проверяет, прошло ли больше hours_limit часов с момента dt_input."""
@@ -51,6 +82,25 @@ def is_expired(dt_input, hours_limit=4):
         dt = dt.replace(tzinfo=TZ)
 
     return (datetime.now(TZ) - dt) > timedelta(hours=hours_limit)
+
+
+def is_special_aircraft(reg, airline_name):
+    reg = (reg or '').strip().upper()
+    airline_lower = (airline_name or '').lower()
+
+    # Проверяем запрещённые регистрации
+    if reg in EXCLUDED_REGISTRATIONS:
+        return False
+
+    # Проверяем исключённые авиакомпании
+    if any(word.lower() in airline_lower for word in EXCLUDED_AIRLINE_KEYWORDS):
+        return False
+
+    # Проверяем признаки спецливреи
+    return any(
+        keyword.lower() in airline_lower
+        for keyword in SPECIAL_KEYWORDS
+    )
 
 
 def parse_flight_time(time_str):
@@ -200,15 +250,7 @@ def analyze_fr24_data(fr24_data, target_dt, flight_type='arrival'):
         else:
             aircraft_type = model_data
 
-        keywords = [
-            'livery', '(', 'special', 'sticker',
-            'panda', 'expo', 'color'
-        ]
-
-        is_special = any(
-            kw in airline_name.lower()
-            for kw in keywords
-        )
+        is_special = is_special_aircraft(reg, airline_name)
 
         return reg, airline_name, is_special, aircraft_type, True, True
 
