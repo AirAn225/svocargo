@@ -20,7 +20,6 @@ MY_CHAT_ID = int(os.environ["MY_CHAT_ID"])
 
 DATA_DIR = os.getenv("DATA_DIR", "/app/data")
 os.makedirs(DATA_DIR, exist_ok=True)   # ← ИЗМЕНЕНО: создаём папку, если её нет
-logfile = os.path.join(DATA_DIR, "bot.log")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GETSCHEDULE_PATH   = os.path.join(BASE_DIR, "getschedule.py")
 FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24v2.py")
@@ -38,47 +37,36 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 INFO_FILE = os.path.join(DATA_DIR, "info.txt")
 HOTTAB_FILE = os.path.join(DATA_DIR, "hot-tab.txt")
 
-# 1. Создаем форматтеры
+logfile = os.path.join(DATA_DIR, "bot.log")
+commands_logfile = os.path.join(DATA_DIR, "commands.log")
+
 formatter_all = logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(name)s: %(message)s", 
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-formatter_cmd = logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(message)s", 
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-# 2. Обработчик для ОБЩЕГО файла
+formatter_cmd = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Технический лог
 file_handler_all = logging.FileHandler(logfile, encoding='utf-8')
 file_handler_all.setFormatter(formatter_all)
 
-# 3. Обработчик для ФАЙЛА С КОМАНДАМИ
-commands_logfile = os.path.join(DATA_DIR, 'commands.log')
+log = logging.getLogger("bot")
+log.setLevel(logging.INFO)
+log.addHandler(file_handler_all)
+log.propagate = False
+
+# Лог взаимодействий пользователей
 file_handler_cmd = logging.FileHandler(commands_logfile, encoding='utf-8')
 file_handler_cmd.setFormatter(formatter_cmd)
 
-# 4. Фильтр для команд
-class CommandFilter(logging.Filter):
-    def filter(self, record):
-        # Пропускаем только сообщения с тегом [CMD]
-        return '[CMD]' in record.getMessage()
-
-file_handler_cmd.addFilter(CommandFilter())
-
-# 5. Получаем КОРНЕВОЙ логгер и настраиваем его
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-
-# На всякий случай удаляем старые обработчики, если они были
-if root_logger.hasHandlers():
-    root_logger.handlers.clear()
-
-# Вешаем наши обработчики на корневой логгер
-root_logger.addHandler(file_handler_all)
-root_logger.addHandler(file_handler_cmd)
-
-# Ваш локальный логгер (для удобства)
-log = logging.getLogger(__name__)
+commands_logger = logging.getLogger("commands")
+commands_logger.setLevel(logging.INFO)
+commands_logger.addHandler(file_handler_cmd)
+commands_logger.propagate = False
 ####################################################################
 print(f"[DEBUG] BASE_DIR = {BASE_DIR}")
 print(f"[DEBUG] files here: {os.listdir(BASE_DIR)}")
@@ -154,11 +142,9 @@ allowed_user_ids = load_allowlist()
 
 class LoggingMiddleware(telebot.BaseMiddleware):
     def __init__(self):
-        # Мы хотим перехватывать только обычные сообщения и нажатия кнопок
         self.update_types = ['message', 'callback_query']
 
     def pre_process(self, message, data):
-        # 1. Определяем, кто пишет
         user = getattr(message, 'from_user', None)
         if not user:
             return
@@ -167,26 +153,21 @@ class LoggingMiddleware(telebot.BaseMiddleware):
         username = f"@{user.username}" if user.username else "без username"
         name = user.first_name or "Пользователь"
 
-        # 2. Определяем тип события: обычный текст, команда или callback (кнопка)
         if hasattr(message, 'data') and message.data:
-            # Это нажатие Inline-кнопки (callback_query)
-            action_type = "Нажатие кнопки (Callback)"
+            action_type = "Нажатие кнопки"
             content = message.data
+
         elif message.text:
-            # Это текст. Проверяем, команда ли это (начинается с /)
-            if message.text.startswith('/'):
-                action_type = "Команда"
-                content = f"[CMD] {message.text}"
-            else:
-                action_type = "Текст"
+            action_type = "Команда" if message.text.startswith('/') else "Текст"
             content = message.text
+
         else:
-            # Это что-то другое (фото, стикер и т.д.)
             action_type = "Вложение"
             content = f"[{message.content_type}]"
 
-        # 3. Пишем в лог
-        log.info(f"👤 {name} ({username}, ID: {user_id}) | {action_type}: {content}")
+        commands_logger.info(
+            f"👤 {name} ({username}, ID: {user_id}) | {action_type}: {content}"
+        )
 
     def post_process(self, message, data, exception):
         pass
