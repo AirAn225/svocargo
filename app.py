@@ -1253,6 +1253,8 @@ svo_client = TelegramClient(
 
 @svo_client.on(events.NewMessage(chats=SVO_SOURCE_CHANNEL))
 async def svo_message_handler(event):
+    log.info(f'Получено новое сообщение из {SVO_SOURCE_CHANNEL}')
+
     message = event.message.message
 
     if not message:
