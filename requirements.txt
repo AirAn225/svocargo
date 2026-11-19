@@ -3,3 +3,4 @@ APScheduler
 requests
 tzdata
 FlightRadarAPI
+telethon
