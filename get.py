@@ -25,7 +25,7 @@ def get_aircraft_photo(REGISTRATION):
     params = {
         "reg": REGISTRATION,
         "photos": 1,
-        "only_fr": "true"
+        "only_fr": "false"
     }
 
     try:
