@@ -8,7 +8,7 @@ DATA_DIR = os.getenv('DATA_DIR', '/app/data')
 #aircraftcard_path = 'aircraft_card.json'
 getcard_path = os.path.join(DATA_DIR, 'getcard.txt')
 aircraftcard_path = os.path.join(DATA_DIR, 'aircraft_card.json')
-logfile = os.path.join(DATA_DIR, "bot.log")
+logfile = os.path.join(DATA_DIR, "get.log")
 
 API_URL = "https://www.jetapi.dev/api"
 logging.basicConfig(
@@ -20,9 +20,9 @@ with open(getcard_path, "r") as f:
     REGISTRATION = f.read()  # Замени на нужную регистрацию
 
 
-def get_aircraft_photo(registration):
+def get_aircraft_photo(REGISTRATION):
     params = {
-        "reg": registration,
+        "reg": REGISTRATION,
         "photos": 1,
         "only_fr": "true"
     }
