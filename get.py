@@ -3,7 +3,7 @@ import json
 import os
 import logging
 
-DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+DATA_DIR = os.getenv("DATA_DIR", "/app/data")
 #getcard_path = 'getcard.txt'
 #aircraftcard_path = 'aircraft_card.json'
 getcard_path = os.path.join(DATA_DIR, 'getcard.txt')
@@ -12,6 +12,7 @@ logfile = os.path.join(DATA_DIR, "get.log")
 
 API_URL = "https://www.jetapi.dev/api"
 logging.basicConfig(
+    filename=logfile,
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
