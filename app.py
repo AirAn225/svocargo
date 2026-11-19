@@ -2,51 +2,244 @@ import json
 import re
 import telebot
 import os
-from pathlib import Path
+import asyncio
+import threading
+import logging
+import subprocess
+import sys
+import time
+import html
+import requests
+from telethon import TelegramClient, events
+from datetime import datetime
+from telethon import TelegramClient, events
 from datetime import datetime, time as dtime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from telebot.handler_backends import SkipHandler
 from telebot import types
-import logging
-import subprocess
-import sys
-from telebot.handler_backends import SkipHandler
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+
 ####################################################################
 TOKEN = os.environ["TOKEN"]
 MY_CHAT_ID = int(os.environ["MY_CHAT_ID"])
-
+####################################################################
 DATA_DIR = os.getenv("DATA_DIR", "/app/data")
-logfile = os.path.join(DATA_DIR, "bot.log")
+os.makedirs(DATA_DIR, exist_ok=True)  # ← ИЗМЕНЕНО: создаём папку, если её нет
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-GETSCHEDULE_PATH   = os.path.join(BASE_DIR, "getschedule.py")
-FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24.py")
+GETSCHEDULE_PATH = os.path.join(BASE_DIR, "getschedule.py")
+FLIGHTRADAR24_PATH = os.path.join(BASE_DIR, "flightradar24v2.py")
+aircraft_card_file = os.path.join(DATA_DIR, "aircraft_card.json")
+requestcard_file = os.path.join(DATA_DIR, "getcard.txt")
 TZ = ZoneInfo("Europe/Moscow")
-print("Локальное время: %s, UTC: %s", datetime.now(), datetime.now(timezone.utc))
+####################################################################
+SVO_STATUS_FILE = os.path.join(DATA_DIR, 'svo_status.json')
+TELEGRAM_API_ID = int(os.getenv('TELEGRAM_API_ID'))
+TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
+TELETHON_SESSION = os.path.join(DATA_DIR, 'favt_session')
+SVO_SOURCE_CHANNEL = 'favt_info'
+####################################################################
+print(f"Локальное время: {datetime.now()}, UTC: {datetime.now(timezone.utc)}")
+
 bot = telebot.TeleBot(TOKEN, use_class_middlewares=True)
 BAN_FILE = os.path.join(DATA_DIR, "banned_users.json")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+# ← ИЗМЕНЕНО: info.txt и hot-tab.txt — рядом с кодом, а не в DATA_DIR
+INFO_FILE = os.path.join(DATA_DIR, "info.txt")
+HOTTAB_FILE = os.path.join(DATA_DIR, "hot-tab.txt")
+
+logfile = os.path.join(DATA_DIR, "bot.log")
+commands_logfile = os.path.join(DATA_DIR, "commands.log")
+
+formatter_all = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
 )
-log = logging.getLogger(__name__)
+
+formatter_cmd = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Технический лог
+file_handler_all = logging.FileHandler(logfile, encoding='utf-8')
+file_handler_all.setFormatter(formatter_all)
+
+log = logging.getLogger("bot")
+log.setLevel(logging.INFO)
+log.addHandler(file_handler_all)
+log.propagate = False
+
+# Лог взаимодействий пользователей
+file_handler_cmd = logging.FileHandler(commands_logfile, encoding='utf-8')
+file_handler_cmd.setFormatter(formatter_cmd)
+
+commands_logger = logging.getLogger("commands")
+commands_logger.setLevel(logging.INFO)
+commands_logger.addHandler(file_handler_cmd)
+commands_logger.propagate = False
 ####################################################################
 print(f"[DEBUG] BASE_DIR = {BASE_DIR}")
 print(f"[DEBUG] files here: {os.listdir(BASE_DIR)}")
 ####################################################################
+# ───────────────────────────────────────────────────────────
+# ALLOW-LIST
+# ───────────────────────────────────────────────────────────
+ALLOWLIST_FILE = os.path.join(DATA_DIR, "allowlist.json")
+
+
+def load_allowlist() -> set:
+    """Читает allowlist.json. Возвращает set разрешённых user_id."""
+    if not os.path.exists(ALLOWLIST_FILE):
+        return {MY_CHAT_ID}
+
+    try:
+        with open(ALLOWLIST_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        log.exception("Ошибка чтения allowlist.json")
+        return {MY_CHAT_ID}
+
+    if not isinstance(data, dict):
+        log.warning("allowlist.json должен быть словарём, получен %s", type(data).__name__)
+        return {MY_CHAT_ID}
+
+    allowed = set()
+    for key, value in data.items():
+        if key.startswith("_"):  # на случай _comment, если захотите
+            continue
+        if value is True:
+            try:
+                allowed.add(int(key))
+            except ValueError:
+                log.warning("Некорректный ID в allowlist.json: %r", key)
+    return allowed or {MY_CHAT_ID}
+
+
+def save_allowlist(ids: set):
+    # читаем текущий файл, чтобы не потерять false
+    existing = {}
+    if os.path.exists(ALLOWLIST_FILE):
+        try:
+            with open(ALLOWLIST_FILE, encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+
+    new_data = {}
+
+    # сохраняем явные false
+    for key, value in existing.items():
+        if key.startswith("_"):
+            continue
+        if value is False:
+            new_data[key] = False
+
+    # добавляем/перезаписываем true
+    for uid in sorted(ids):
+        new_data[str(uid)] = True
+
+    with open(ALLOWLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(new_data, f, ensure_ascii=False, indent=2)
+
+
+allowed_user_ids = load_allowlist()
+
+
+# ───────────────────────────────────────────────────────────
+# MIDDLEWARE
+# ───────────────────────────────────────────────────────────
+# Создаем логгер (если он у вас уже есть — используйте его)
+
+class LoggingMiddleware(telebot.BaseMiddleware):
+    def __init__(self):
+        self.update_types = ['message', 'callback_query']
+
+    def pre_process(self, message, data):
+        user = getattr(message, 'from_user', None)
+        if not user:
+            return
+
+        user_id = user.id
+        username = f"@{user.username}" if user.username else "без username"
+        name = user.first_name or "Пользователь"
+
+        if hasattr(message, 'data') and message.data:
+            action_type = "Нажатие кнопки"
+            content = message.data
+
+        elif message.text:
+            action_type = "Команда" if message.text.startswith('/') else "Текст"
+            content = message.text
+
+        else:
+            action_type = "Вложение"
+            content = f"[{message.content_type}]"
+
+        commands_logger.info(
+            f"👤 {name} ({username}, ID: {user_id}) | {action_type}: {content}"
+        )
+
+    def post_process(self, message, data, exception):
+        pass
+
+
+class AllowListMiddleware(telebot.BaseMiddleware):
+    def __init__(self, allowed_ids: set):
+        self.allowed_ids = allowed_ids
+        self.update_types = ['message', 'edited_message', 'callback_query']
+
+    def _get_user_id(self, obj):
+        user = getattr(obj, "from_user", None)
+        return getattr(user, "id", None)
+
+    def _is_private(self, obj) -> bool:
+        chat = getattr(obj, "chat", None)
+        if chat is not None:
+            return chat.type == "private"
+        inner = getattr(obj, "message", None)
+        if inner is not None:
+            return getattr(inner.chat, "type", None) == "private"
+        return False
+
+    def pre_process(self, message, data):
+        user_id = self._get_user_id(message)
+        if user_id in self.allowed_ids:
+            return  # разрешён — пропускаем
+
+        # не разрешён — отвечаем только в личке, чтобы не спамить в группах
+        if self._is_private(message):
+            try:
+                bot.send_message(
+                    message.chat.id,
+                    "🔒 В целях безопасности, бот доступен только определённым пользователям \n"
+                    "Напишите @RA73220 - он за минуту даст вам доступ =)",
+                )
+            except Exception:
+                log.exception("Не удалось отправить отказ пользователю %s", user_id)
+
+        return SkipHandler()
+
+    def post_process(self, message, data, exception):
+        pass
+
+
+# ───────────────────────────────────────────────────────────
+# ПОДКЛЮЧЕНИЕ (порядок важен!)
+# ───────────────────────────────────────────────────────────
+
+####################################################################
 # Настройки "технических работ"
-# Список интервалов техработ: [(начало, конец), ...]
 MAINTENANCE_INTERVALS = [
-    (dtime(3, 0),  dtime(3, 20)),    # ночью
-    (dtime(9, 30), dtime(9, 40)),    # утром
-    (dtime(21, 30), dtime(21, 50)),  # вечером
-    (dtime(23, 30), dtime(23, 50)),   # вечером 2
+    (dtime(7, 30), dtime(7, 40)),
+    (dtime(12, 30), dtime(12, 40)),
+    (dtime(21, 30), dtime(21, 50)),
+    (dtime(23, 30), dtime(23, 40)),
 ]
 
+
 def is_maintenance_now() -> bool:
-    now = datetime.now(TZ).time()   # ← время в нужном поясе
+    now = datetime.now(TZ).time()
     for start, end in MAINTENANCE_INTERVALS:
         if start <= end:
             if start <= now <= end:
@@ -56,27 +249,65 @@ def is_maintenance_now() -> bool:
                 return True
     return False
 
+
+# ← ИЗМЕНЕНО: универсальная функция ответа в ту же ветку
+def reply(message, text, **kwargs):
+    """Отвечает в ту же ветку, где пришло сообщение (для форумов)."""
+    thread_id = getattr(message, "message_thread_id", None)
+    return bot.send_message(
+        message.chat.id,
+        text,
+        message_thread_id=thread_id,
+        **kwargs,
+    )
+
+
 # Middleware для сообщений
 class MaintenanceMiddleware(telebot.BaseMiddleware):
-    def __init__(self):
+    def __init__(self, allowed_thread_id=None, allowed_chat_id=None):
         self.update_types = ['message', 'edited_message']
+        self.allowed_thread_id = allowed_thread_id
+        self.allowed_chat_id = allowed_chat_id
+
+    def _in_allowed_place(self, message) -> bool:
+        """True, если сообщение в личке или в разрешённой ветке разрешённой группы."""
+        chat = message.chat
+        if chat.type == "private":
+            return True
+        if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
+            return False
+        return getattr(message, "message_thread_id", None) == self.allowed_thread_id
 
     def pre_process(self, message, data):
+        if not self._in_allowed_place(message):
+            return  # не наше место — молча пропускаем, фильтр веток решит дальше
         if is_maintenance_now():
-            bot.reply_to(message, f"🛠 Попробуйте позже. Бот обновляет данные. Ещё немного =)")
-            return SkipHandler()  # ← вот это остановит хендлер
-        # ничего не возвращаем, если работы не идут
+            reply(message, "🛠 Попробуйте позже. Бот обновляет данные. Ещё немного =)")
+            return SkipHandler()
 
     def post_process(self, message, data, exception):
         pass
 
-# Подключаем middleware ко всем сообщениям
+
 # Middleware для кнопок
 class MaintenanceCallbackMiddleware(telebot.BaseMiddleware):
-    def __init__(self):
+    def __init__(self, allowed_thread_id=None, allowed_chat_id=None):
         self.update_types = ['callback_query']
+        self.allowed_thread_id = allowed_thread_id
+        self.allowed_chat_id = allowed_chat_id
+
+    def _in_allowed_place(self, call) -> bool:
+        chat = call.message.chat
+        if chat.type == "private":
+            return True
+        if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
+            return False
+        thread_id = getattr(call.message, "message_thread_id", None)
+        return thread_id == self.allowed_thread_id
 
     def pre_process(self, call, data):
+        if not self._in_allowed_place(call):
+            return
         if is_maintenance_now():
             bot.answer_callback_query(
                 call.id,
@@ -88,60 +319,58 @@ class MaintenanceCallbackMiddleware(telebot.BaseMiddleware):
     def post_process(self, call, data, exception):
         pass
 
-ALLOWED_THREAD_ID = 231466             # ← ЗАМЕНИТЕ на ваш ID ветки
-# ID группы, если хотите ограничить конкретной группой (None = любая)
-ALLOWED_CHAT_ID = -1001571945990      # ← ЗАМЕНИТЕ или поставьте None
+
+ALLOWED_THREAD_ID = 231466
+ALLOWED_CHAT_ID = -1001571945990
 
 
 class TopicFilterMiddleware(telebot.BaseMiddleware):
-    """
-    Пропускает:
-      - все сообщения в личке;
-      - сообщения в разрешённой ветке разрешённой группы.
-    Игнорирует всё остальное.
-    """
+    """Пропускает личку и разрешённую ветку разрешённой группы."""
+
     def __init__(self, allowed_thread_id, allowed_chat_id=None):
         self.allowed_thread_id = allowed_thread_id
         self.allowed_chat_id = allowed_chat_id
         self.update_types = ['message', 'edited_message', 'callback_query']
 
     def _get_thread_id(self, obj):
-        """Достаёт message_thread_id и для message, и для callback_query."""
         thread_id = getattr(obj, "message_thread_id", None)
-        # у callback_query thread_id лежит в obj.message
         inner = getattr(obj, "message", None)
         if inner is not None:
             thread_id = getattr(inner, "message_thread_id", thread_id)
         return thread_id
 
     def pre_process(self, message, data):
-        chat = message.chat
+        try:
+            chat = message.chat
 
-        # 1. Личка — пропускаем всегда
-        if chat.type == "private":
-            return
+            # ← ИЗМЕНЕНО: админ проходит всегда (опционально)
+            sender_id = getattr(getattr(message, "from_user", None), "id", None)
+            if sender_id == MY_CHAT_ID:
+                return
 
-        # 2. Если задана конкретная группа — всё остальное игнорируем
-        if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
-            return SkipHandler()
+            # 1. Личка — пропускаем всегда
+            if chat.type == "private":
+                return
 
-        # 3. В группе разрешена только одна ветка
-        if self._get_thread_id(message) != self.allowed_thread_id:
-            return SkipHandler()
+            # 2. Конкретная группа
+            if self.allowed_chat_id is not None and chat.id != self.allowed_chat_id:
+                return SkipHandler()
+
+            # 3. Конкретная ветка
+            if self._get_thread_id(message) != self.allowed_thread_id:
+                return SkipHandler()
+        except Exception as e:
+            log.exception("TopicFilterMiddleware error: %s", e)
 
     def post_process(self, message, data, exception):
         pass
 
 
-# ───────────────────────────────────────────────────────────
-# ПОДКЛЮЧЕНИЕ MIDDLEWARE (порядок важен!)
-# ───────────────────────────────────────────────────────────
-
-# 1. Техработы — важнее всего
+# Подключение middleware
+bot.setup_middleware(LoggingMiddleware())
+bot.setup_middleware(AllowListMiddleware(allowed_user_ids))
 bot.setup_middleware(MaintenanceMiddleware())
 bot.setup_middleware(MaintenanceCallbackMiddleware())
-
-# 2. Фильтр по веткам — если не та ветка, дальше не идём
 bot.setup_middleware(TopicFilterMiddleware(
     allowed_thread_id=ALLOWED_THREAD_ID,
     allowed_chat_id=ALLOWED_CHAT_ID,
@@ -151,46 +380,35 @@ bot.setup_middleware(TopicFilterMiddleware(
 ####################################################################
 def test_scheduler():
     log.warning("ПЛАНИРОВЩИК РАБОТАЕТ: %s", datetime.now())
-####################################################################
+
+
 def run_script(script_path):
-  TZ = ZoneInfo("Europe/Moscow")
-  now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"⏰ Планировщик запускает скрипт: {script_path} в {now_str}")
 
-  print(f"⏰ Планировщик запускает скрипт: {script_path} в {now_str}")
+    with open(logfile, "a", encoding="utf-8") as log_file:
+        log_file.write(f"\n{'=' * 50}\n")
+        log_file.write(f"🚀 Запуск {script_path} через планировщик: {now_str}\n")
+        log_file.write(f"{'=' * 50}\n")
 
-  # Открываем общий файл логов в режиме добавления ('a')
-  with open(logfile, "a", encoding="utf-8") as log_file:
-    # Записываем разделитель сеанса в общий файл
-    log_file.write(f"\n{'='*50}\n")
-    log_file.write(f"🚀 Запуск {script_path} через планировщик: {now_str}\n")
-    log_file.write(f"{'='*50}\n")
-
-    try:
-      # Запускаем скрипт и перенаправляем stdout и stderr в общий лог-файл
-      subprocess.run(
-          [sys.executable, script_path],
-          stdout=log_file,
-          stderr=log_file,
-          text=True,
-          check=True,
-      )
-      log_file.write(f"✅ Скрипт {script_path} успешно завершен.\n")
-
-    except subprocess.CalledProcessError as e:
-      err_msg = f"❌ Ошибка в скрипте {script_path} (код выхода: {e.returncode})"
-      print(err_msg)
-      log_file.write(f"{err_msg}\n")
-    except Exception as e:
-      err_msg = f"❌ Непредвиденная ошибка при запуске {script_path}: {e}"
-      print(err_msg)
-      log_file.write(f"{err_msg}\n")
+        try:
+            subprocess.run(
+                [sys.executable, script_path],
+                stdout=log_file,
+                stderr=log_file,
+                text=True,
+                check=True,
+            )
+            log_file.write(f"✅ Скрипт {script_path} успешно завершен.\n")
+        except subprocess.CalledProcessError as e:
+            log_file.write(f"❌ Ошибка в скрипте {script_path} (код: {e.returncode})\n")
+        except Exception as e:
+            log_file.write(f"❌ Непредвиденная ошибка при запуске {script_path}: {e}\n")
 
 
+# ← ИЗМЕНЕНО: планировщик создаётся, но start() — внутри main
 scheduler = BackgroundScheduler(timezone="Europe/Moscow")
 
-# --- Задача 1: other_script.py, 6 раз в день ---я
-
-# Задача 1: каждый день в 21:30
 scheduler.add_job(
     run_script,
     CronTrigger(hour=21, minute=30, timezone="Europe/Moscow"),
@@ -201,10 +419,9 @@ scheduler.add_job(
     max_instances=1,
 )
 
-# Задача 2: каждый день в 03:31, 09:31, 23:31
 scheduler.add_job(
     run_script,
-    CronTrigger(hour="3, 9, 23", minute="31", timezone="Europe/Moscow"),
+    CronTrigger(hour="7, 12, 23", minute="31", timezone="Europe/Moscow"),
     args=[FLIGHTRADAR24_PATH],
     id="three_matches_per_day",
     misfire_grace_time=600,
@@ -212,23 +429,24 @@ scheduler.add_job(
     max_instances=1,
 )
 
-scheduler.start()
 
 #####################################################################################
-#####################################################################################
-
 def load_users() -> dict:
     if not os.path.exists(USERS_FILE):
         return {}
     with open(USERS_FILE, encoding="utf-8") as f:
         try:
-            return json.load(f)
+            data = json.load(f)
+            if not isinstance(data, dict):  # ← ИЗМЕНЕНО: защита от []
+                return {}
+            return data
         except json.JSONDecodeError:
             return {}
 
+
 def save_user(user):
     users = load_users()
-    uid = str(user.id)          # ключи в JSON — только строки
+    uid = str(user.id)
 
     if uid not in users:
         users[uid] = {
@@ -239,28 +457,74 @@ def save_user(user):
             "first_seen": datetime.now(TZ).isoformat(),
         }
     else:
-        # обновим данные, если поменялись
         users[uid]["username"] = user.username
         users[uid]["first_name"] = user.first_name
         users[uid]["last_name"] = user.last_name
 
     with open(USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
+
+
 #####################################################################################
+def send_aircraft_card(bot, message, registration):
+    # Читаем базу карточек
+    try:
+        with open(aircraft_card_file, "r", encoding="utf-8") as file:
+            aircraft_cards = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        bot.reply_to(message, "Не удалось открыть базу карточек.")
+        return
+
+    # Ищем самолёт по регистрации
+    aircraft = next(
+        (
+            item for item in aircraft_cards
+            if item["registration"].upper() == registration.upper()
+        ),
+        None
+    )
+
+    if aircraft is None:
+        bot.reply_to(
+            message,
+            f"Карточка самолёта {registration} не найдена."
+        )
+        return
+
+    # Подготавливаем данные
+    registration = html.escape(aircraft["registration"])
+    airline = html.escape(aircraft["airline"])
+    livery = html.escape(aircraft["livery"])
+    aircraft_type = html.escape(aircraft["aircraft_type"])
+    type_code = html.escape(aircraft.get("type_code", "—"))
+    mode_s = html.escape(aircraft.get("mode_s", "—"))
+
+    caption = (
+        "✈️ <b>AIRCRAFT PROFILE</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"🛩 <b>{registration}</b>\n"
+        f"<b>{airline}</b>\n"
+        f"🎨 {livery}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"📋 <b>Aircraft:</b> {aircraft_type}\n"
+        f"🔖 <b>Type:</b> {type_code}\n"
+        f"📡 <b>Mode S:</b> {mode_s}\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "✈️ <i>AIRCRAFT DATABASE</i>"
+    )
+
+    bot.send_photo(
+        message.chat.id,
+        photo=aircraft["photo"],
+        caption=caption,
+        parse_mode="HTML"
+    )
+
+
 #####################################################################################
 
-@bot.message_handler(commands=['start'])
-# Главное меню
-def start_cmd(message):
-    bot.send_message(
-        message.chat.id,
-        "Главное меню",
-        reply_markup=get_main_keyboard()
-    )
-    save_user(message.from_user)
-####################################################################
-# 1. По команде /feedback переводим пользователя в режим ввода
-# --- РАБОТА СО СПИСКОМ БАНОВ ---
+#####################################################################################
+# --- СПИСОК БАНОВ ---
 def load_banned_users() -> set:
     if os.path.exists(BAN_FILE):
         try:
@@ -270,48 +534,141 @@ def load_banned_users() -> set:
             return set()
     return set()
 
+
 def save_banned_users(banned_set: set):
     with open(BAN_FILE, "w", encoding="utf-8") as f:
         json.dump(list(banned_set), f, ensure_ascii=False, indent=2)
 
+
 banned_users = load_banned_users()
 
-# --- ХЕНДЛЕРЫ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ---
-# Главная Клавиатура
+
+# --- КЛАВИАТУРА ---
 def get_main_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn_feedback = types.KeyboardButton("💌Написать админу💌")
     btn_gethot = types.KeyboardButton("🔥Список горячих рейсов🔥")
     btn_info = types.KeyboardButton("📃Информация о боте📃")
+    btn_metar = types.KeyboardButton("☀️METAR Шереметьево☀️")
+    btn_kover = types.KeyboardButton("🎈Информация о ковре🎈")
     keyboard.row(btn_gethot)
+    keyboard.row(btn_kover, btn_metar)
     keyboard.row(btn_info, btn_feedback)
     return keyboard
 
 
+#####################################################################################
+@bot.message_handler(commands=['start'])
+def start_cmd(message):
+    # ← ИЗМЕНЕНО: reply() вместо send_message()
+    reply(message, "Главное меню", reply_markup=get_main_keyboard())
+    save_user(message.from_user)
 
 
-# Приём обратной связи от пользователей
+# ─── НАСТРОЙКИ КУЛДАУНОВ ───
+metar_cooldowns = {}
+COOLDOWN_SECONDS = 60  # 60 сек для одного пользователя
+GLOBAL_COOLDOWN = 10  # 10 сек для всех пользователей (защита IP)
+last_global_metar_request = 0  # Глобальная переменная для всего сервера
+
+
+@bot.message_handler(func=lambda msg: msg.text == "☀️METAR Шереметьево☀️")
+@bot.message_handler(commands=["metar"])
+def send_metar(message):
+    global last_global_metar_request
+    user_id = message.from_user.id
+    now = time.time()
+
+    # 1. Проверка личного кулдауна
+    if now - metar_cooldowns.get(user_id, 0) < COOLDOWN_SECONDS:
+        wait_time = int(COOLDOWN_SECONDS - (now - metar_cooldowns.get(user_id, 0)))
+        reply(message, f"⏳ Не так быстро. Подождите ещё {wait_time} сек. Запросы METAR можно делать раз в минуту.")
+        return
+
+    # 2. Проверка глобального кулдауна (защита от спама с разных аккаунтов)
+    if now - last_global_metar_request < GLOBAL_COOLDOWN:
+        reply(message, "⏳ Сервер обрабатывает другой запрос. Подождите пару секунд.")
+        return
+
+    # 3. Обновляем таймеры (запрос разрешён)
+    metar_cooldowns[user_id] = now
+    last_global_metar_request = now
+
+    # 4. Запрос к API
+    wait_msg = reply(message, "⏳ Запрашиваю METAR для UUEE...")
+
+    url = "https://aviationweather.gov/api/data/metar"
+    params = {
+        "ids": "UUEE",
+        "format": "raw",
+        "taf": "false"
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+
+        metar_text = response.text.strip()
+        if not metar_text:
+            metar_text = "⚠️ Данные METAR временно недоступны."
+
+        bot.delete_message(wait_msg.chat.id, wait_msg.message_id)
+        reply(
+            message,
+            f"📡 **METAR Шереметьево (UUEE):**\n\n`{metar_text}`",
+            parse_mode="Markdown"
+        )
+
+    except Exception as e:
+        bot.delete_message(wait_msg.chat.id, wait_msg.message_id)
+        reply(message, f"❌ Не удалось получить METAR. Ошибка: {e}")
+
+
+#####################################################################################
+#####################################################################################
+@bot.message_handler(func=lambda msg: msg.text == "✈️Карточка по бортовому✈️")
+@bot.message_handler(commands=["ac"])
+def aircraft_command(message):
+    args = message.text.split()
+    chat_id = message.chat.id
+
+    if len(args) != 2:
+        bot.reply_to(
+            message,
+            "Укажите регистрацию самолёта.\n"
+            "Пример: /ac B-306N"
+        )
+        return
+
+    registration = args[1].upper()
+
+    send_aircraft_card(bot, message, registration)
+
+
+#####################################################################################
+#####################################################################################
+# --- ФИДБЕК ---
 @bot.message_handler(func=lambda msg: msg.text == "💌Написать админу💌")
 @bot.message_handler(commands=["feedback"])
 def handle_feedback_cmd(message):
     user_id = message.chat.id
 
-    # Проверка на бан
     if user_id in banned_users:
-        bot.send_message(user_id, "🚫 Вы заблокированы и не можете отправлять сообщения.")
+        reply(message, "🚫 Вы заблокированы и не можете отправлять сообщения.")
         return
+
     cancel_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     cancel_kb.add(types.KeyboardButton("❌ Отмена"))
-    msg = bot.send_message(
-        user_id,
+    msg = reply(
+        message,
         "Напишите ваше сообщение для администратора:\n\n"
         "*(Нажмите «❌ Отмена», если передумали)*",
         parse_mode="Markdown",
-        reply_markup=cancel_kb
+        reply_markup=cancel_kb,
     )
     bot.register_next_step_handler(msg, process_feedback)
 
-# Отмена отправки сообщения
+
 def process_feedback(message):
     user_id = message.chat.id
 
@@ -319,12 +676,9 @@ def process_feedback(message):
         return
 
     if message.text == "❌ Отмена":
-        bot.send_message(
-            user_id,
-            "👌 Отправка сообщения отменена.",
-            reply_markup=get_main_keyboard()
-        )
+        reply(message, "👌 Отправка сообщения отменена.", reply_markup=get_main_keyboard())
         return
+
     try:
         user_name = message.from_user.first_name or "Пользователь"
         username = (
@@ -340,27 +694,20 @@ def process_feedback(message):
             f"💬 **Текст:**\n{message.text}"
         )
 
-        # Кнопка для быстрого бана под сообщением
         keyboard = telebot.types.InlineKeyboardMarkup()
         ban_btn = telebot.types.InlineKeyboardButton(
             text="🚫 Забанить пользователя", callback_data=f"ban_{user_id}"
         )
         keyboard.add(ban_btn)
 
-        bot.send_message(
-            MY_CHAT_ID, caption, parse_mode="Markdown", reply_markup=keyboard
-        )
-        bot.send_message(user_id, "✅ Ваше сообщение доставлено!")
-
+        bot.send_message(MY_CHAT_ID, caption, parse_mode="Markdown", reply_markup=keyboard)
+        reply(message, "✅ Ваше сообщение доставлено!")
     except Exception as e:
-        print(f"❌ Ошибка отправки: {e}")
-        bot.send_message(user_id, "⚠️ Ошибка при отправке сообщения.")
+        log.exception("Ошибка отправки фидбека: %s", e)
+        reply(message, "⚠️ Ошибка при отправке сообщения.")
 
 
-# --- ХЕНДЛЕРЫ ДЛЯ АДМИНИСТРАТОРА ---
-
-
-# Нажатие на кнопку "Забанить пользователя" под сообщением
+# --- АДМИН: бан через кнопку ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("ban_"))
 def callback_ban_user(call):
     if call.from_user.id != MY_CHAT_ID:
@@ -376,38 +723,56 @@ def callback_ban_user(call):
         f"🚫 Пользователь `{target_id}` забанен. Ему запрещено отправлять фидбек.",
         parse_mode="Markdown",
     )
-botinfofile = os.path.join(DATA_DIR, "info.txt")
 
+
+# --- ИНФО ---
 @bot.message_handler(func=lambda msg: msg.text == "📃Информация о боте📃")
 @bot.message_handler(commands=["info"])
 def send_info(message):
-    user_id = message.chat.id
-    if os.path.exists(botinfofile):
-        with open(botinfofile, 'r', encoding='utf-8') as infofile:
-            sendinfo = infofile.read()
+    if os.path.exists(INFO_FILE):
+        with open(INFO_FILE, "r", encoding="utf-8") as f:
+            sendinfo = f.read()
     else:
         sendinfo = "⚠️ Информация временно недоступна."
-    bot.send_message(user_id, sendinfo, disable_web_page_preview=True, parse_mode='HTML')
-hottabfile = os.path.join(DATA_DIR, "hot-tab.txt")
-    
+    reply(message, sendinfo, disable_web_page_preview=True, parse_mode="HTML")
+
+
+@bot.message_handler(commands=["allow"], func=lambda m: m.chat.id == MY_CHAT_ID)
+def allow_cmd(message):
+    try:
+        target = int(message.text.split()[1])
+        allowed_user_ids.add(target)
+        save_allowlist(allowed_user_ids)
+        bot.send_message(MY_CHAT_ID, f"✅ `{target}` добавлен в allow-list.")
+    except (IndexError, ValueError):
+        bot.send_message(MY_CHAT_ID, "Использование: `/allow <USER_ID>`", parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["disallow"], func=lambda m: m.chat.id == MY_CHAT_ID)
+def disallow_cmd(message):
+    try:
+        target = int(message.text.split()[1])
+        allowed_user_ids.discard(target)
+        save_allowlist(allowed_user_ids)
+        bot.send_message(MY_CHAT_ID, f"✅ `{target}` удалён из allow-list.")
+    except (IndexError, ValueError):
+        bot.send_message(MY_CHAT_ID, "Использование: `/disallow <USER_ID>`", parse_mode="Markdown")
+
+
+# --- ГОРЯЧИЕ РЕЙСЫ ---
 @bot.message_handler(func=lambda msg: msg.text == "🔥Список горячих рейсов🔥")
 @bot.message_handler(commands=["gethot"])
-def send_info(message):
-    user_id = message.chat.id
-    if os.path.exists(hottabfile):
-        with open(hottabfile, 'r', encoding='utf-8') as hotfile:
-            sendhot = hotfile.read()
+def send_hot(message):
+    if os.path.exists(HOTTAB_FILE):
+        with open(HOTTAB_FILE, "r", encoding="utf-8") as f:
+            sendhot = f.read()
     else:
         sendhot = "⚠️ Информация временно недоступна."
-    bot.send_message(user_id, sendhot, disable_web_page_preview=True, parse_mode='HTML')
+    reply(message, sendhot, disable_web_page_preview=True, parse_mode="HTML")
 
 
-
-# Ручной бан по команде: /ban 123456789
-@bot.message_handler(
-    commands=["ban"], func=lambda msg: msg.chat.id == MY_CHAT_ID
-)
-# Команда бана
+# --- БАН / РАЗБАН ---
+@bot.message_handler(commands=["ban"], func=lambda msg: msg.chat.id == MY_CHAT_ID)
 def ban_command(message):
     try:
         target_id = int(message.text.split()[1])
@@ -418,11 +783,7 @@ def ban_command(message):
         bot.send_message(MY_CHAT_ID, "⚠️ Использование: `/ban <USER_ID>`", parse_mode="Markdown")
 
 
-# Разбан по команде: /unban 123456789
-@bot.message_handler(
-    commands=["unban"], func=lambda msg: msg.chat.id == MY_CHAT_ID
-)
-# Команда разбана
+@bot.message_handler(commands=["unban"], func=lambda msg: msg.chat.id == MY_CHAT_ID)
 def unban_command(message):
     try:
         target_id = int(message.text.split()[1])
@@ -433,10 +794,8 @@ def unban_command(message):
         bot.send_message(MY_CHAT_ID, "⚠️ Использование: `/unban <USER_ID>`", parse_mode="Markdown")
 
 
-# Ответ админа на пересланное сообщение (reply)
-@bot.message_handler(
-    func=lambda msg: msg.chat.id == MY_CHAT_ID and msg.reply_to_message
-)
+# --- ОТВЕТ АДМИНА ПОЛЬЗОВАТЕЛЮ ---
+@bot.message_handler(func=lambda msg: msg.chat.id == MY_CHAT_ID and msg.reply_to_message)
 def reply_to_user(message):
     try:
         reply_msg = message.reply_to_message
@@ -464,15 +823,481 @@ def reply_to_user(message):
             parse_mode="Markdown",
         )
         bot.send_message(MY_CHAT_ID, "✅ Ответ доставлен!")
-
     except Exception as e:
         bot.send_message(MY_CHAT_ID, f"❌ Ошибка: {e}")
 
 
+############################################################
+@bot.message_handler(commands=['fr24'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
+def cmd_run_fr24(message):
+    # 1. Отправляем сообщение, что запуск начался
+    status_msg = bot.reply_to(message, "⏳ Запускаю `flightradar24v2.py` в фоне. Это может занять пару минут...",
+                              parse_mode="Markdown")
+
+    # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    frscript_path = os.path.join(BASE_DIR, "flightradar24v2.py")
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(frscript_path):
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Ошибка: файл `flightradar24v2.py` не найден по пути `{frscript_path}`."
+        )
+        return
+
+    try:
+        # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
+        # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
+        # либо можно перенаправить их в файл логов.
+        process = subprocess.Popen(
+            [sys.executable, frscript_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        # 4. Сообщаем пользователю, что всё ок
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"✅ Скрипт успешно запущен в фоне!\n\nPID процесса: `{process.pid}`\n\n_Результаты появятся в файлах, когда скрипт завершит работу._",
+            parse_mode="Markdown"
+        )
+        log.info(f"Админ запустил flightradar24v2.py вручную. PID: {process.pid}")
+
+    except Exception as e:
+        # Если произошла ошибка при запуске
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Не удалось запустить скрипт. Ошибка:\n`{e}`",
+            parse_mode="Markdown"
+        )
+        log.exception("Ошибка при ручном запуске flightradar24v2.py")
+
+
+############################################################
+############################################################
+@bot.message_handler(commands=['gets'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
+def cmd_run_schedule(message):
+    # 1. Отправляем сообщение, что запуск начался
+    status_msg = bot.reply_to(message, "⏳ Запускаю `getschedule.py` в фоне. Это может занять пару минут...",
+                              parse_mode="Markdown")
+
+    # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    gets_path = os.path.join(BASE_DIR, "getschedule.py")
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(gets_path):
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Ошибка: файл `getschedule.py` не найден по пути `{gets_path}`."
+        )
+        return
+
+    try:
+        # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
+        # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
+        # либо можно перенаправить их в файл логов.
+        process = subprocess.Popen(
+            [sys.executable, gets_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        # 4. Сообщаем пользователю, что всё ок
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"✅ Скрипт успешно запущен в фоне!\n\nPID процесса: `{process.pid}`\n\n_Результаты появятся в файлах, когда скрипт завершит работу._",
+            parse_mode="Markdown"
+        )
+        log.info(f"Админ запустил getschedule.py вручную. PID: {process.pid}")
+
+    except Exception as e:
+        # Если произошла ошибка при запуске
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Не удалось запустить скрипт. Ошибка:\n`{e}`",
+            parse_mode="Markdown"
+        )
+        log.exception("Ошибка при ручном запуске getschedule.py")
+
+
+@bot.message_handler(commands=['reloadhot'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
+def cmd_run_reloadhot(message):
+    # 1. Отправляем сообщение, что запуск начался
+    status_msg = bot.reply_to(message, "⏳ Запускаю `nocheck.py` в фоне. Это может занять пару минут...",
+                              parse_mode="Markdown")
+
+    # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    nocheck_path = os.path.join(BASE_DIR, "nocheck.py")
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(nocheck_path):
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Ошибка: файл `nocheck.py` не найден по пути `{nocheck_path}`."
+        )
+        return
+
+    try:
+        # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
+        # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
+        # либо можно перенаправить их в файл логов.
+        process = subprocess.Popen(
+            [sys.executable, nocheck_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        # 4. Сообщаем пользователю, что всё ок
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"✅ Скрипт успешно запущен в фоне!\n\nPID процесса: `{process.pid}`\n\n_Результаты появятся в файлах, когда скрипт завершит работу._",
+            parse_mode="Markdown"
+        )
+        log.info(f"Админ запустил nocheck.py вручную. PID: {process.pid}")
+
+    except Exception as e:
+        # Если произошла ошибка при запуске
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Не удалось запустить скрипт. Ошибка:\n`{e}`",
+            parse_mode="Markdown"
+        )
+        log.exception("Ошибка при ручном запуске nocheck.py")
+
+
+@bot.message_handler(commands=['getcard'], func=lambda msg: msg.chat.id == MY_CHAT_ID)
+def cmd_run_getcard(message):
+    args = message.text.split()
+    chat_id = message.chat.id
+
+    if len(args) != 2:
+        bot.reply_to(
+            message,
+            "Укажите регистрацию самолёта.\n"
+            "Пример: /aircraft B-306N"
+        )
+        return
+
+    registration_for_getcard = args[1].upper()
+    # 1. Отправляем сообщение, что запуск начался
+    status_msg = bot.reply_to(message, "⏳ Запускаю `get.py` в фоне. Это может занять пару минут...",
+                              parse_mode="Markdown")
+
+    # 2. Формируем путь к скрипту (он лежит в той же папке, что и бот)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    get_path = os.path.join(BASE_DIR, "get.py")
+
+    # Проверяем, существует ли файл
+    if not os.path.exists(get_path):
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Ошибка: файл `get.py` не найден по пути `{get_path}`."
+        )
+        return
+
+    with open(requestcard_file, 'w', encoding='utf-8') as f:
+        f.write(registration_for_getcard)  # то же самое, что и без write
+
+    try:
+        # 3. Запускаем скрипт в фоне (Popen не блокирует бота)
+        # stdout и stderr направляем в DEVNULL, чтобы они не забивали консоль бота,
+        # либо можно перенаправить их в файл логов.
+        process = subprocess.Popen(
+            [sys.executable, get_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        # 4. Сообщаем пользователю, что всё ок
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"✅ Скрипт успешно запущен в фоне!\n\nPID процесса: `{process.pid}`\n\n_Результаты появятся в файлах, когда скрипт завершит работу._",
+            parse_mode="Markdown"
+        )
+        log.info(f"Админ запустил get.py вручную. PID: {process.pid}")
+
+    except Exception as e:
+        # Если произошла ошибка при запуске
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            text=f"❌ Не удалось запустить скрипт. Ошибка:\n`{e}`",
+            parse_mode="Markdown"
+        )
+        log.exception("Ошибка при ручном запуске get.py")
+
+
+############################################################
+
+@bot.message_handler(commands=['sayall'])
+def cmd_sayall(message):
+    user_id = message.from_user.id
+
+    # 1. Проверка прав (ИСПРАВЛЕНО)
+    if user_id != MY_CHAT_ID:
+        bot.reply_to(message, '⛔ У вас нет прав для выполнения этой команды')
+        return
+
+    # 2. Получение текста
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        bot.reply_to(message, '⚠️ Напишите текст: `/sayall Текст`', parse_mode='Markdown')
+        return
+    text_to_send = parts[1]
+
+    # 3. Чтение файла
+    if not os.path.exists(USERS_FILE):
+        bot.reply_to(message, f'❌ Файл `{USERS_FILE}` не найден.')
+        return
+
+    try:
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        if isinstance(data, dict):
+            user_ids = [int(uid) for uid in data.keys()]  # ← вот тут магия
+        elif isinstance(data, list):
+            user_ids = [int(uid) for uid in data]
+        else:
+            user_ids = []
+
+    except Exception as e:
+        bot.reply_to(message, f'❌ Ошибка чтения JSON: {e}')
+        return
+
+    if not user_ids:
+        bot.reply_to(message, '⚠️ Список пользователей пуст.')
+        return
+
+    # 4. Рассылка
+    status_msg = bot.reply_to(message, f'⏳ Начинаю рассылку для {len(user_ids)} пользователей...')
+
+    success_count = 0
+    fail_count = 0
+
+    for uid in user_ids:
+        try:
+            # Отправляем без parse_mode, чтобы Markdown в тексте не сломал рассылку
+            bot.send_message(uid, text_to_send)
+            success_count += 1
+        except Exception as e:
+            fail_count += 1
+            print(f"Не доставлено {uid}: {e}", flush=True)  # Для отладки
+
+        time.sleep(0.05)  # Защита от лимитов Telegram (не более 20 сообщений в секунду)
+
+    # 5. Отчет
+    bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=status_msg.message_id,
+        text=f'✅ Рассылка завершена.\n\nУспешно: {success_count}\nОшибок: {fail_count}'
+    )
+
+
+def show_svo_status(message):
+    status_data = get_svo_status()
+
+    if not status_data:
+        bot.send_message(
+            message.chat.id,
+            '⚪️ <b>Информация о режиме работы Шереметьево</b>\n\n'
+            'Нет данных о текущем режиме работы аэропорта.',
+            parse_mode='HTML'
+        )
+        return
+
+    status = status_data.get('status', 'unknown')
+    description = status_data.get('description', 'Нет информации')
+    updated_at = status_data.get('updated_at', 'Неизвестно')
+    source = status_data.get('source', 'Неизвестно')
+
+    status_names = {
+        'normal': '🟢 Ограничения сняты',
+        'restricted': '▫️ Временные ограничения',
+        'restricted_by_agreement': '🟡 Работа по согласованию',
+        'unknown': '⚪️ Неизвестный статус'
+    }
+
+    status_text = status_names.get(status, '⚪️ Неизвестный статус')
+
+    text = (
+        '✈️ <b>Информация о режиме работы Шереметьево</b>\n\n'
+        f'<b>Текущий статус:</b> {status_text}\n'
+        f'<b>Описание:</b> {description}\n\n'
+        f'<b>Последнее обновление:</b> {updated_at}\n'
+        f'<b>Источник:</b> @{source}'
+    )
+
+    bot.send_message(
+        message.chat.id,
+        text,
+        parse_mode='HTML'
+    )
+############################################################
+############################################################
+def get_svo_status():
+    if not os.path.exists(SVO_STATUS_FILE):
+        return None
+
+    try:
+        with open(SVO_STATUS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        return data.get('SVO')
+
+    except Exception as e:
+        log.error(f'Ошибка чтения статуса SVO: {e}')
+        return None
+
+def save_svo_status(status, description, source, message_id):
+    old_data = get_svo_status()
+    old_status = old_data.get('status') if old_data else None
+
+    data = {
+        'SVO': {
+            'status': status,
+            'description': description,
+            'updated_at': datetime.now(TZ).strftime('%Y-%m-%d %H:%M:%S'),
+            'source': source,
+            'message_id': message_id
+        }
+    }
+
+    try:
+        with open(SVO_STATUS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+        if old_status != status:
+            log.info(
+                f'Статус SVO изменён: {old_status} -> {status}'
+            )
+        else:
+            log.info(f'Статус SVO подтверждён: {status}')
+
+    except Exception as e:
+        log.error(f'Ошибка сохранения статуса SVO: {e}')
+def parse_svo_status(text):
+    text = text.lower()
+
+    # Проверяем, относится ли сообщение к Шереметьево
+    if 'Шереметьево' not in text and 'svo' not in text:
+        return None
+
+    # Ограничения сняты
+    if (
+        'ограничения сняты' in text
+        or 'сняты ограничения' in text
+    ):
+        return (
+            'normal',
+            'Ограничения сняты'
+        )
+
+    # Работа по согласованию
+    if 'по согласованию' in text:
+        return (
+            'restricted_by_agreement',
+            'Приём и выпуск воздушных судов по согласованию'
+        )
+
+    # Введены временные ограничения
+    if (
+        'введены ограничения' in text
+        or 'временные ограничения' in text
+        or 'ограничения на прием' in text
+        or 'ограничения на приём' in text
+    ):
+        return (
+            'restricted',
+            'Временные ограничения на приём и выпуск воздушных судов'
+        )
+
+    return None
+def check_svo_status(text, message_id, source='favt_info'):
+    result = parse_svo_status(text)
+
+    # Сообщение не относится к режиму работы SVO
+    if result is None:
+        return False
+
+    status, description = result
+
+    save_svo_status(
+        status=status,
+        description=description,
+        source=source,
+        message_id=message_id
+    )
+
+    return True
+svo_client = TelegramClient(
+    TELETHON_SESSION,
+    TELEGRAM_API_ID,
+    TELEGRAM_API_HASH
+)
+
+
+@svo_client.on(events.NewMessage(chats=SVO_SOURCE_CHANNEL))
+async def svo_message_handler(event):
+    message = event.message.message
+
+    if not message:
+        return
+
+    check_svo_status(
+        text=message,
+        message_id=event.message.id,
+        source=SVO_SOURCE_CHANNEL
+    )
+def run_svo_monitor():
+    async def main():
+        await svo_client.start()
+
+        log.info('Мониторинг режима SVO запущен')
+
+        await svo_client.run_until_disconnected()
+
+    asyncio.run(main())
+
+
+def start_svo_monitor():
+    thread = threading.Thread(
+        target=run_svo_monitor,
+        daemon=True,
+        name='SVO-Monitor'
+    )
+
+    thread.start()
+
+    log.info('Поток мониторинга SVO запущен')
+
+@bot.message_handler(func=lambda msg: msg.text == "🎈Информация о ковре🎈")
+def svo_status_handler(message):
+    show_svo_status(message)
+############################################################
+############################################################
 if __name__ == "__main__":
     print("Бот запущен!")
     print("TZ:", TZ)
     print("Время в TZ:", datetime.now(TZ))
     print("Время сервера:", datetime.now())
     print("Техработы сейчас:", is_maintenance_now())
+
+    scheduler.start()  # ← ИЗМЕНЕНО: start() теперь тут, а не на верхнем уровне
+    log.info("Планировщик запущен, задач: %d", len(scheduler.get_jobs()))
+    start_svo_monitor()
     bot.infinity_polling()
