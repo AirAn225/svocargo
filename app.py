@@ -1273,11 +1273,14 @@ async def debug_message_handler(event):
         )
 def run_svo_monitor():
     async def main():
-        await svo_client.start()
+        try:
+            await svo_client.start()
+            log.info('Мониторинг режима SVO запущен')
 
-        log.info('Мониторинг режима SVO запущен')
+            await svo_client.run_until_disconnected()
 
-        await svo_client.run_until_disconnected()
+        except Exception as e:
+            log.exception(f'Ошибка мониторинга SVO: {e}')
 
     asyncio.run(main())
 
@@ -1304,7 +1307,7 @@ if __name__ == "__main__":
     print("Время в TZ:", datetime.now(TZ))
     print("Время сервера:", datetime.now())
     print("Техработы сейчас:", is_maintenance_now())
-
+    log.info(f'Telethon session path: {TELETHON_SESSION}')
     scheduler.start()  # ← ИЗМЕНЕНО: start() теперь тут, а не на верхнем уровне
     log.info("Планировщик запущен, задач: %d", len(scheduler.get_jobs()))
     start_svo_monitor()
