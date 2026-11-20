@@ -1251,20 +1251,26 @@ svo_client = TelegramClient(
 )
 
 
-@svo_client.on(events.NewMessage(chats=SVO_SOURCE_CHANNEL))
-async def svo_message_handler(event):
-    log.info(f'Получено новое сообщение из {SVO_SOURCE_CHANNEL}')
+@svo_client.on(events.NewMessage)
+async def debug_message_handler(event):
+    chat = await event.get_chat()
 
-    message = event.message.message
-
-    if not message:
-        return
-
-    check_svo_status(
-        text=message,
-        message_id=event.message.id,
-        source=SVO_SOURCE_CHANNEL
+    log.info(
+        f'[TELETHON] Новое сообщение | '
+        f'Chat: {getattr(chat, "title", None)} | '
+        f'Username: {getattr(chat, "username", None)} | '
+        f'ID: {event.chat_id}'
     )
+
+    message = event.message.message or ''
+
+    if 'favt_info' == getattr(chat, 'username', None):
+        log.info(f'[FAVT] Сообщение: {message}')
+        check_svo_status(
+            text=message,
+            message_id=event.message.id,
+            source='favt_info'
+        )
 def run_svo_monitor():
     async def main():
         await svo_client.start()
