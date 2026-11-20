@@ -24,8 +24,6 @@ with open(getcard_path, "r") as f:
 def get_aircraft_photo(REGISTRATION):
     params = {
         "reg": REGISTRATION,
-        "photos": 1,
-        "only_fr": "false"
     }
 
     try:
@@ -66,9 +64,6 @@ def get_aircraft_photo(REGISTRATION):
         "https://www.jetapi.dev/api",
         params={
             "reg": REGISTRATION,
-            "photos": 1,
-            "flights": 0,
-            "only_jp": "true"
         },
         timeout=30
     )
